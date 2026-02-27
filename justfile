@@ -39,6 +39,6 @@ fmt-md-check:
 # Run preflight checks
 preflight:
     @echo "Preflight check..."
-    @just fmt-md
+    @just fmt-md-check
     @just fmt-check
     @just test
