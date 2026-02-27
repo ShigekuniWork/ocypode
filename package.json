@@ -1,0 +1,8 @@
+{
+	"name": "ocypode",
+	"version": "0.0.0",
+	"private": true,
+	"dependencies": {
+		"markdownlint-cli2": "^0.21.0"
+	}
+}
