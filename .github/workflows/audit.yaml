@@ -1,0 +1,37 @@
+name: Audit
+
+run-name: "Audit run '${{ github.head_ref || github.ref_name }}'"
+
+on:
+  push:
+    paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+    branches:
+      - main
+  pull_request:
+    paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+  schedule:
+    # Run daily at 02:00 UTC
+    - cron: '0 2 * * *'
+
+jobs:
+  cargo-deny:
+    name: Check dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          toolchain: 1.93.1
+
+      - name: Install cargo-deny
+        run: cargo install --locked cargo-deny@0.18.9
+
+      - name: Check dependencies for known issues
+        run: cargo deny check
