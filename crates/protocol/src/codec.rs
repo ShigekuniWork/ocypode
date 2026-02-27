@@ -4,7 +4,9 @@ use crate::{
     Command,
     error::{DecodeError, EncodeError},
     header::FixedHeader,
-    message::{Message, connect::Connect, info::Info, publish::Pub, sub::Sub, unsub::Unsub},
+    message::{
+        Message, connect::Connect, info::Info, msg::Msg, publish::Pub, sub::Sub, unsub::Unsub,
+    },
     wire::{CommandCodec, wire_frame},
 };
 
@@ -17,6 +19,7 @@ impl ServerCodec {
     pub fn encode(&self, message: &Message) -> Result<Bytes, EncodeError> {
         match message {
             Message::Info(info) => Ok(wire_frame(info)),
+            Message::Msg(msg) => Ok(wire_frame(msg)),
             _ => Err(EncodeError::WrongDirection),
         }
     }
@@ -60,6 +63,10 @@ impl ClientCodec {
                 let info = Info::decode(header.flags, &mut src)?;
                 Ok(Message::Info(info))
             }
+            Command::MSG => {
+                let msg = Msg::decode(header.flags, &mut src)?;
+                Ok(Message::Msg(msg))
+            }
             other => Err(DecodeError::UnsupportedCommand(other)),
         }
     }
@@ -82,7 +89,7 @@ mod tests {
     use bytes::Bytes;
 
     use super::*;
-    use crate::message::{connect::Auth, publish::Pub, sub::Sub, unsub::Unsub};
+    use crate::message::{connect::Auth, msg::Msg, publish::Pub, sub::Sub, unsub::Unsub};
 
     #[test]
     fn server_encode_client_decode_info_roundtrip() {
@@ -225,5 +232,25 @@ mod tests {
 
         let Message::Unsub(decoded) = message else { panic!("expected Unsub") };
         assert_eq!(decoded.subscription_id, Bytes::from_static(b"sub-1"));
+    }
+
+    #[test]
+    fn server_encode_client_decode_msg_roundtrip() {
+        let original = Msg {
+            topic: Bytes::from_static(b"events.data"),
+            subscription_id: Bytes::from_static(b"sub-1"),
+            reply_to: None,
+            header: None,
+            payload: Bytes::from_static(b"payload"),
+        };
+        let wire = ServerCodec.encode(&Message::Msg(original)).unwrap();
+        let message = ClientCodec.decode(wire).unwrap();
+
+        let Message::Msg(decoded) = message else { panic!("expected Msg") };
+        assert_eq!(decoded.topic, Bytes::from_static(b"events.data"));
+        assert_eq!(decoded.subscription_id, Bytes::from_static(b"sub-1"));
+        assert!(decoded.reply_to.is_none());
+        assert!(decoded.header.is_none());
+        assert_eq!(decoded.payload, Bytes::from_static(b"payload"));
     }
 }

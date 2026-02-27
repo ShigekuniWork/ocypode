@@ -1,11 +1,13 @@
 pub mod connect;
 pub mod info;
+pub mod msg;
 pub mod publish;
 pub mod sub;
 pub mod unsub;
 
 pub use connect::Connect;
 pub use info::Info;
+pub use msg::Msg;
 pub use publish::Pub;
 pub use sub::Sub;
 pub use unsub::Unsub;
@@ -17,4 +19,5 @@ pub enum Message {
     Pub(Pub),
     Sub(Sub),
     Unsub(Unsub),
+    Msg(Msg),
 }
