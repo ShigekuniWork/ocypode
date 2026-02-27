@@ -1,6 +1,10 @@
 use bytes::{BufMut, Bytes, BytesMut};
 
-use crate::{Command, codec::CommandCodec, error::DecodeError, wire::WireDecode};
+use crate::{
+    Command,
+    error::DecodeError,
+    wire::{CommandCodec, WireDecode},
+};
 
 const AUTH_REQUIRED_BIT: u8 = 0x01;
 const HEADERS_BIT: u8 = 0x02;

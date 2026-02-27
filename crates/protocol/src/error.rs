@@ -14,4 +14,14 @@ pub enum DecodeError {
 
     #[error("unsupported command: {0:?}")]
     UnsupportedCommand(Command),
+
+    #[error("unknown auth type: {0:#x}")]
+    UnknownAuthType(u8),
+}
+
+/// Error returned when encoding a message fails.
+#[derive(Debug, thiserror::Error)]
+pub enum EncodeError {
+    #[error("message cannot be encoded in this direction")]
+    WrongDirection,
 }

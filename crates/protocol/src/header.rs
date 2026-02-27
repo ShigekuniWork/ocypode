@@ -1,13 +1,10 @@
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
-use crate::{Command, error::DecodeError};
-
-const COMMAND_SHIFT: u8 = 4;
-const FLAGS_MASK: u8 = 0x0F;
-const VARINT_DATA_MASK: u8 = 0x7F;
-const VARINT_CONTINUATION_BIT: u8 = 0x80;
-const VARINT_DATA_BITS: u32 = 7;
-const VARINT_MAX_BYTES: usize = 4;
+use crate::{
+    Command,
+    error::DecodeError,
+    wire::{COMMAND_SHIFT, FLAGS_MASK, WireDecode, WireEncode},
+};
 
 /// Fixed header present in every protocol message.
 ///
@@ -33,79 +30,44 @@ impl FixedHeader {
         let first_byte = src.get_u8();
         let command = Command::try_from(first_byte >> COMMAND_SHIFT)?;
         let flags = first_byte & FLAGS_MASK;
-        let remaining_length = decode_variable_length(src)?;
+        let remaining_length = src.read_varint()?;
 
         Ok(Self { command, flags, remaining_length })
     }
 
     pub fn encode(&self, dst: &mut BytesMut) {
         dst.put_u8((self.command as u8) << COMMAND_SHIFT | (self.flags & FLAGS_MASK));
-        encode_variable_length(self.remaining_length, dst);
-    }
-}
-
-/// Decodes a variable-length integer where the MSB of each byte is a
-/// continuation flag and the lower 7 bits encode the value. Supports 1–4 bytes.
-fn decode_variable_length(src: &mut Bytes) -> Result<u32, DecodeError> {
-    let mut value: u32 = 0;
-    let mut shift = 0u32;
-
-    for _ in 0..VARINT_MAX_BYTES {
-        if !src.has_remaining() {
-            return Err(DecodeError::BufferTooShort { expected: 1, actual: 0 });
-        }
-        let byte = src.get_u8();
-        value |= ((byte & VARINT_DATA_MASK) as u32) << shift;
-        if byte & VARINT_CONTINUATION_BIT == 0 {
-            return Ok(value);
-        }
-        shift += VARINT_DATA_BITS;
-    }
-
-    Err(DecodeError::VariableLengthOverflow)
-}
-
-/// Encodes a u32 as a variable-length integer into `dst`.
-fn encode_variable_length(mut value: u32, dst: &mut BytesMut) {
-    loop {
-        let mut byte = (value & VARINT_DATA_MASK as u32) as u8;
-        value >>= VARINT_DATA_BITS;
-        if value > 0 {
-            byte |= VARINT_CONTINUATION_BIT;
-        }
-        dst.put_u8(byte);
-        if value == 0 {
-            break;
-        }
+        dst.put_varint(self.remaining_length);
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::wire::{WireDecode, WireEncode};
 
     #[test]
     fn variable_length_single_byte_roundtrip() {
         let mut buf = BytesMut::new();
-        encode_variable_length(127, &mut buf);
+        buf.put_varint(127);
         let mut bytes = buf.freeze();
-        assert_eq!(decode_variable_length(&mut bytes).unwrap(), 127);
+        assert_eq!(bytes.read_varint().unwrap(), 127);
     }
 
     #[test]
     fn variable_length_multi_byte_roundtrip() {
         let mut buf = BytesMut::new();
-        encode_variable_length(16_383, &mut buf);
+        buf.put_varint(16_383);
         let mut bytes = buf.freeze();
-        assert_eq!(decode_variable_length(&mut bytes).unwrap(), 16_383);
+        assert_eq!(bytes.read_varint().unwrap(), 16_383);
     }
 
     #[test]
     fn variable_length_max_roundtrip() {
         let mut buf = BytesMut::new();
-        encode_variable_length(268_435_455, &mut buf);
+        buf.put_varint(268_435_455);
         let mut bytes = buf.freeze();
-        assert_eq!(decode_variable_length(&mut bytes).unwrap(), 268_435_455);
+        assert_eq!(bytes.read_varint().unwrap(), 268_435_455);
     }
 
     #[test]

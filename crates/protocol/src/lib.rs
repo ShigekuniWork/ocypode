@@ -8,7 +8,7 @@
 //! TODO: Link to a stable, versioned protocol specification once its location
 //! is finalized.
 //!
-//! TODO: Implement codecs for CONNECT, PUB, SUB, UNSUB, MSG, PING, PONG, OK, ERR.
+//! TODO: Implement codecs for PUB, SUB, UNSUB, MSG, PING, PONG, OK, ERR.
 
 pub mod codec;
 pub mod error;
@@ -16,10 +16,10 @@ pub mod header;
 pub mod message;
 pub mod wire;
 
-pub use codec::{ClientCodec, CommandCodec, ServerCodec};
-pub use error::DecodeError;
+pub use codec::{ClientCodec, ServerCodec};
+pub use error::{DecodeError, EncodeError};
 pub use message::Message;
-pub use wire::{Headers, Payload, Topic};
+pub use wire::{CommandCodec, Headers, Payload, Topic};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
@@ -50,18 +50,12 @@ impl TryFrom<u8> for Command {
     type Error = DecodeError;
 
     fn try_from(value: u8) -> Result<Self, Self::Error> {
-        match value {
-            0x1 => Ok(Command::INFO),
-            0x2 => Ok(Command::CONNECT),
-            0x3 => Ok(Command::PUB),
-            0x4 => Ok(Command::SUB),
-            0x5 => Ok(Command::UNSUB),
-            0x6 => Ok(Command::MSG),
-            0x7 => Ok(Command::PING),
-            0x8 => Ok(Command::PONG),
-            0x9 => Ok(Command::OK),
-            0xA => Ok(Command::ERR),
-            other => Err(DecodeError::UnknownCommand(other)),
+        if (Command::INFO as u8..=Command::ERR as u8).contains(&value) {
+            // SAFETY: Command is #[repr(u8)] with contiguous discriminants INFO..=ERR,
+            // and value has been verified to be within that range.
+            Ok(unsafe { std::mem::transmute::<u8, Command>(value) })
+        } else {
+            Err(DecodeError::UnknownCommand(value))
         }
     }
 }
