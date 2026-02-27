@@ -4,7 +4,7 @@ use crate::{
     Command,
     error::{DecodeError, EncodeError},
     header::FixedHeader,
-    message::{Message, connect::Connect, info::Info},
+    message::{Message, connect::Connect, info::Info, publish::Pub, sub::Sub, unsub::Unsub},
     wire::{CommandCodec, wire_frame},
 };
 
@@ -29,6 +29,18 @@ impl ServerCodec {
             Command::CONNECT => {
                 let connect = Connect::decode(header.flags, &mut src)?;
                 Ok(Message::Connect(connect))
+            }
+            Command::PUB => {
+                let message = Pub::decode(header.flags, &mut src)?;
+                Ok(Message::Pub(message))
+            }
+            Command::SUB => {
+                let message = Sub::decode(header.flags, &mut src)?;
+                Ok(Message::Sub(message))
+            }
+            Command::UNSUB => {
+                let message = Unsub::decode(header.flags, &mut src)?;
+                Ok(Message::Unsub(message))
             }
             other => Err(DecodeError::UnsupportedCommand(other)),
         }
@@ -57,6 +69,9 @@ impl ClientCodec {
     pub fn encode(&self, message: &Message) -> Result<Bytes, EncodeError> {
         match message {
             Message::Connect(connect) => Ok(wire_frame(connect)),
+            Message::Pub(message) => Ok(wire_frame(message)),
+            Message::Sub(message) => Ok(wire_frame(message)),
+            Message::Unsub(message) => Ok(wire_frame(message)),
             _ => Err(EncodeError::WrongDirection),
         }
     }
@@ -67,7 +82,7 @@ mod tests {
     use bytes::Bytes;
 
     use super::*;
-    use crate::message::connect::Auth;
+    use crate::message::{connect::Auth, publish::Pub, sub::Sub, unsub::Unsub};
 
     #[test]
     fn server_encode_client_decode_info_roundtrip() {
@@ -166,5 +181,49 @@ mod tests {
             ClientCodec.encode(&Message::Info(info)),
             Err(EncodeError::WrongDirection)
         ));
+    }
+
+    #[test]
+    fn client_encode_server_decode_pub_roundtrip() {
+        let original = Pub {
+            topic: Bytes::from_static(b"events"),
+            reply_to: None,
+            header: None,
+            payload: Bytes::from_static(b"data"),
+        };
+        let wire = ClientCodec.encode(&Message::Pub(original)).unwrap();
+        let message = ServerCodec.decode(wire).unwrap();
+
+        let Message::Pub(decoded) = message else { panic!("expected Pub") };
+        assert_eq!(decoded.topic, Bytes::from_static(b"events"));
+        assert!(decoded.reply_to.is_none());
+        assert!(decoded.header.is_none());
+        assert_eq!(decoded.payload, Bytes::from_static(b"data"));
+    }
+
+    #[test]
+    fn client_encode_server_decode_sub_roundtrip() {
+        let original = Sub {
+            topic: Bytes::from_static(b"events.>"),
+            subscription_id: Bytes::from_static(b"sub-1"),
+            queue_group: None,
+        };
+        let wire = ClientCodec.encode(&Message::Sub(original)).unwrap();
+        let message = ServerCodec.decode(wire).unwrap();
+
+        let Message::Sub(decoded) = message else { panic!("expected Sub") };
+        assert_eq!(decoded.topic, Bytes::from_static(b"events.>"));
+        assert_eq!(decoded.subscription_id, Bytes::from_static(b"sub-1"));
+        assert!(decoded.queue_group.is_none());
+    }
+
+    #[test]
+    fn client_encode_server_decode_unsub_roundtrip() {
+        let original = Unsub { subscription_id: Bytes::from_static(b"sub-1") };
+        let wire = ClientCodec.encode(&Message::Unsub(original)).unwrap();
+        let message = ServerCodec.decode(wire).unwrap();
+
+        let Message::Unsub(decoded) = message else { panic!("expected Unsub") };
+        assert_eq!(decoded.subscription_id, Bytes::from_static(b"sub-1"));
     }
 }

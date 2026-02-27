@@ -8,7 +8,7 @@
 //! TODO: Link to a stable, versioned protocol specification once its location
 //! is finalized.
 //!
-//! TODO: Implement codecs for PUB, SUB, UNSUB, MSG, PING, PONG, OK, ERR.
+//! TODO: Implement codecs for MSG, PING, PONG, OK, ERR.
 
 pub mod codec;
 pub mod error;
