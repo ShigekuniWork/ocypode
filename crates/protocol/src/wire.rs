@@ -1,5 +1,5 @@
 use bytes::{Buf, BufMut, Bytes, BytesMut};
-pub use wire::{WireDecode, WireEncode};
+pub use common::wire::{WireDecode, WireEncode};
 
 use crate::{Command, error::DecodeError};
 

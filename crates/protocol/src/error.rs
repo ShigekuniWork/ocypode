@@ -22,13 +22,13 @@ pub enum DecodeError {
     InvalidTopic(#[from] topic::TopicError),
 }
 
-impl From<wire::WireError> for DecodeError {
-    fn from(error: wire::WireError) -> Self {
+impl From<common::error::WireError> for DecodeError {
+    fn from(error: common::error::WireError) -> Self {
         match error {
-            wire::WireError::BufferTooShort { expected, actual } => {
+            common::error::WireError::BufferTooShort { expected, actual } => {
                 DecodeError::BufferTooShort { expected, actual }
             }
-            wire::WireError::VariableLengthOverflow => DecodeError::VariableLengthOverflow,
+            common::error::WireError::VariableLengthOverflow => DecodeError::VariableLengthOverflow,
         }
     }
 }

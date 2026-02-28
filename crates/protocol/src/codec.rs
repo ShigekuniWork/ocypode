@@ -87,10 +87,12 @@ impl ClientCodec {
 #[cfg(test)]
 mod tests {
     use bytes::{Bytes, BytesMut};
-    use wire::WireEncode;
 
     use super::*;
-    use crate::message::{connect::Auth, msg::Msg, publish::Pub, sub::Sub, unsub::Unsub};
+    use crate::{
+        message::{connect::Auth, msg::Msg, publish::Pub, sub::Sub, unsub::Unsub},
+        wire::WireEncode,
+    };
 
     fn make_topic(raw: &[u8]) -> topic::Topic {
         let mut buf = BytesMut::new();

@@ -4,7 +4,7 @@
 //! so that individual layers can be accessed without re-scanning the raw bytes.
 
 use bytes::{Bytes, BytesMut};
-use wire::{WireDecode, WireEncode};
+use common::wire::{WireDecode, WireEncode};
 
 use crate::{
     LAYER_SEPARATOR, MAX_SLASH_COUNT, MAXIMUM_TOPIC_LAYER, MAXIMUM_TOPIC_LENGTH, TopicError,

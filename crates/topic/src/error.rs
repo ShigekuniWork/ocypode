@@ -25,5 +25,5 @@ pub enum TopicError {
     MultiLayerWildcardNotTerminal,
 
     #[error(transparent)]
-    Wire(#[from] wire::WireError),
+    Wire(#[from] common::error::WireError),
 }

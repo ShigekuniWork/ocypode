@@ -7,21 +7,12 @@ use std::mem::size_of;
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
+use crate::error::WireError;
+
 pub const VARINT_DATA_MASK: u8 = 0x7F;
 pub const VARINT_CONTINUATION_BIT: u8 = 0x80;
 pub const VARINT_DATA_BITS: u32 = 7;
 pub const VARINT_MAX_BYTES: usize = 4;
-
-/// Error returned when reading a typed field from a wire buffer fails.
-#[derive(Debug, thiserror::Error)]
-pub enum WireError {
-    #[error("buffer too short: expected at least {expected} bytes, got {actual}")]
-    BufferTooShort { expected: usize, actual: usize },
-
-    #[error("variable-length integer exceeds the maximum of 4 bytes")]
-    VariableLengthOverflow,
-}
-
 /// Extension trait on [`Bytes`] for reading typed wire-protocol fields.
 pub trait WireDecode {
     fn read_u8(&mut self) -> Result<u8, WireError>;

@@ -82,10 +82,9 @@ impl CommandCodec for Msg {
 #[cfg(test)]
 mod tests {
     use bytes::{Bytes, BytesMut};
-    use wire::WireEncode;
 
     use super::*;
-    use crate::wire::Headers;
+    use crate::wire::{Headers, WireEncode};
 
     fn make_topic(raw: &[u8]) -> Topic {
         let mut buf = BytesMut::new();

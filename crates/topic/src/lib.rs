@@ -174,7 +174,7 @@ impl TopicFilter {
 #[cfg(test)]
 mod tests {
     use bytes::BytesMut;
-    use wire::WireEncode;
+    use common::wire::WireEncode;
 
     use super::*;
 
