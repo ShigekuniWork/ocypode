@@ -1,0 +1,13 @@
+{
+	"$schema": "https://docs.renovatebot.com/renovate-schema.json",
+	"extends": [
+		"config:best-practices",
+		":label(renovate)",
+		":timezone(Asia/Tokyo)"
+	],
+	"configMigration": true,
+	"dependencyDashboard": true,
+	"minimumReleaseAge": "7 days",
+	"prHourlyLimit": 5,
+	"prConcurrentLimit": 10
+}
