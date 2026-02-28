@@ -1,4 +1,5 @@
 use bytes::{Buf, BufMut, Bytes, BytesMut};
+use topic::Topic;
 
 use crate::{
     Command,
@@ -11,8 +12,8 @@ const HAS_HEADER_BIT: u8 = 0x02;
 
 /// Sent by the client to publish a message to a specified topic.
 pub struct Pub {
-    pub topic: Bytes,
-    pub reply_to: Option<Bytes>,
+    pub topic: Topic,
+    pub reply_to: Option<Topic>,
     pub header: Option<Headers>,
     pub payload: Bytes,
 }
@@ -34,9 +35,9 @@ impl CommandCodec for Pub {
     }
 
     fn encode(&self, dst: &mut BytesMut) {
-        dst.put_length_prefixed_u16(self.topic.as_ref());
+        self.topic.encode_to(dst);
         if let Some(reply_to) = &self.reply_to {
-            dst.put_length_prefixed_u16(reply_to.as_ref());
+            reply_to.encode_to(dst);
         }
         if let Some(header) = &self.header {
             let mut header_bytes = BytesMut::new();
@@ -51,9 +52,9 @@ impl CommandCodec for Pub {
         let has_reply_to = flags & HAS_REPLY_TO_BIT != 0;
         let has_header = flags & HAS_HEADER_BIT != 0;
 
-        let topic = src.read_length_prefixed_u16()?;
+        let topic = Topic::decode(src)?;
 
-        let reply_to = if has_reply_to { Some(src.read_length_prefixed_u16()?) } else { None };
+        let reply_to = if has_reply_to { Some(Topic::decode(src)?) } else { None };
 
         let header = if has_header {
             let mut header_bytes = src.read_length_prefixed_u16()?;
@@ -77,10 +78,17 @@ impl CommandCodec for Pub {
 
 #[cfg(test)]
 mod tests {
-    use bytes::BytesMut;
+    use bytes::{Bytes, BytesMut};
+    use wire::WireEncode;
 
     use super::*;
     use crate::wire::Headers;
+
+    fn make_topic(raw: &[u8]) -> Topic {
+        let mut buf = BytesMut::new();
+        buf.put_length_prefixed_u16(raw);
+        Topic::decode(&mut buf.freeze()).unwrap()
+    }
 
     fn encode_pub(message: &Pub) -> Bytes {
         let mut buf = BytesMut::new();
@@ -97,7 +105,7 @@ mod tests {
     #[test]
     fn encode_decode_minimal_roundtrip() {
         let original = Pub {
-            topic: Bytes::from_static(b"events.orders"),
+            topic: make_topic(b"events/orders"),
             reply_to: None,
             header: None,
             payload: Bytes::from_static(b"hello"),
@@ -105,7 +113,7 @@ mod tests {
         let mut bytes = encode_pub(&original);
         let decoded = Pub::decode(original.flags(), &mut bytes).unwrap();
 
-        assert_eq!(decoded.topic, Bytes::from_static(b"events.orders"));
+        assert_eq!(decoded.topic.as_bytes(), &Bytes::from_static(b"events/orders"));
         assert!(decoded.reply_to.is_none());
         assert!(decoded.header.is_none());
         assert_eq!(decoded.payload, Bytes::from_static(b"hello"));
@@ -114,8 +122,8 @@ mod tests {
     #[test]
     fn has_reply_to_flag_set() {
         let message = Pub {
-            topic: Bytes::from_static(b"topic"),
-            reply_to: Some(Bytes::from_static(b"reply")),
+            topic: make_topic(b"topic"),
+            reply_to: Some(make_topic(b"reply")),
             header: None,
             payload: Bytes::new(),
         };
@@ -125,7 +133,7 @@ mod tests {
     #[test]
     fn has_reply_to_flag_unset() {
         let message = Pub {
-            topic: Bytes::from_static(b"topic"),
+            topic: make_topic(b"topic"),
             reply_to: None,
             header: None,
             payload: Bytes::new(),
@@ -136,7 +144,7 @@ mod tests {
     #[test]
     fn has_header_flag_set() {
         let message = Pub {
-            topic: Bytes::from_static(b"topic"),
+            topic: make_topic(b"topic"),
             reply_to: None,
             header: Some(make_header(b"key", b"value")),
             payload: Bytes::new(),
@@ -147,7 +155,7 @@ mod tests {
     #[test]
     fn has_header_flag_unset() {
         let message = Pub {
-            topic: Bytes::from_static(b"topic"),
+            topic: make_topic(b"topic"),
             reply_to: None,
             header: None,
             payload: Bytes::new(),
@@ -158,16 +166,16 @@ mod tests {
     #[test]
     fn encode_decode_with_reply_to_roundtrip() {
         let original = Pub {
-            topic: Bytes::from_static(b"requests"),
-            reply_to: Some(Bytes::from_static(b"replies.123")),
+            topic: make_topic(b"requests"),
+            reply_to: Some(make_topic(b"replies/123")),
             header: None,
             payload: Bytes::from_static(b"ping"),
         };
         let mut bytes = encode_pub(&original);
         let decoded = Pub::decode(original.flags(), &mut bytes).unwrap();
 
-        assert_eq!(decoded.topic, Bytes::from_static(b"requests"));
-        assert_eq!(decoded.reply_to.unwrap(), Bytes::from_static(b"replies.123"));
+        assert_eq!(decoded.topic.as_bytes(), &Bytes::from_static(b"requests"));
+        assert_eq!(decoded.reply_to.unwrap().as_bytes(), &Bytes::from_static(b"replies/123"));
         assert!(decoded.header.is_none());
         assert_eq!(decoded.payload, Bytes::from_static(b"ping"));
     }
@@ -177,7 +185,7 @@ mod tests {
         let mut header = Headers::new();
         header.insert(Bytes::from_static(b"content-type"), Bytes::from_static(b"application/json"));
         let original = Pub {
-            topic: Bytes::from_static(b"metrics"),
+            topic: make_topic(b"metrics"),
             reply_to: None,
             header: Some(header),
             payload: Bytes::from_static(b"{\"value\":42}"),
@@ -185,7 +193,7 @@ mod tests {
         let mut bytes = encode_pub(&original);
         let decoded = Pub::decode(original.flags(), &mut bytes).unwrap();
 
-        assert_eq!(decoded.topic, Bytes::from_static(b"metrics"));
+        assert_eq!(decoded.topic.as_bytes(), &Bytes::from_static(b"metrics"));
         assert!(decoded.reply_to.is_none());
         assert_eq!(decoded.payload, Bytes::from_static(b"{\"value\":42}"));
         let entries = decoded.header.unwrap();
@@ -200,16 +208,16 @@ mod tests {
         header.insert(Bytes::from_static(b"trace-id"), Bytes::from_static(b"xyz"));
         header.insert(Bytes::from_static(b"content-type"), Bytes::from_static(b"application/json"));
         let original = Pub {
-            topic: Bytes::from_static(b"rpc.add"),
-            reply_to: Some(Bytes::from_static(b"inbox.abc")),
+            topic: make_topic(b"rpc/add"),
+            reply_to: Some(make_topic(b"inbox/abc")),
             header: Some(header),
             payload: Bytes::from_static(b"1+2"),
         };
         let mut bytes = encode_pub(&original);
         let decoded = Pub::decode(original.flags(), &mut bytes).unwrap();
 
-        assert_eq!(decoded.topic, Bytes::from_static(b"rpc.add"));
-        assert_eq!(decoded.reply_to.unwrap(), Bytes::from_static(b"inbox.abc"));
+        assert_eq!(decoded.topic.as_bytes(), &Bytes::from_static(b"rpc/add"));
+        assert_eq!(decoded.reply_to.unwrap().as_bytes(), &Bytes::from_static(b"inbox/abc"));
         assert_eq!(decoded.payload, Bytes::from_static(b"1+2"));
         let entries = decoded.header.unwrap();
         let entries = entries.entries();

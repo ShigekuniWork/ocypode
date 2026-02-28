@@ -1,4 +1,5 @@
 use bytes::{Buf, BufMut, Bytes, BytesMut};
+use topic::Topic;
 
 use crate::{
     Command,
@@ -11,9 +12,9 @@ const HAS_HEADER_BIT: u8 = 0x02;
 
 /// Sent by the server to deliver a message to clients subscribed to a topic.
 pub struct Msg {
-    pub topic: Bytes,
+    pub topic: Topic,
     pub subscription_id: Bytes,
-    pub reply_to: Option<Bytes>,
+    pub reply_to: Option<Topic>,
     pub header: Option<Headers>,
     pub payload: Bytes,
 }
@@ -35,10 +36,10 @@ impl CommandCodec for Msg {
     }
 
     fn encode(&self, dst: &mut BytesMut) {
-        dst.put_length_prefixed_u16(self.topic.as_ref());
+        self.topic.encode_to(dst);
         dst.put_length_prefixed_u16(self.subscription_id.as_ref());
         if let Some(reply_to) = &self.reply_to {
-            dst.put_length_prefixed_u16(reply_to.as_ref());
+            reply_to.encode_to(dst);
         }
         if let Some(header) = &self.header {
             let mut header_bytes = BytesMut::new();
@@ -53,10 +54,10 @@ impl CommandCodec for Msg {
         let has_reply_to = flags & HAS_REPLY_TO_BIT != 0;
         let has_header = flags & HAS_HEADER_BIT != 0;
 
-        let topic = src.read_length_prefixed_u16()?;
+        let topic = Topic::decode(src)?;
         let subscription_id = src.read_length_prefixed_u16()?;
 
-        let reply_to = if has_reply_to { Some(src.read_length_prefixed_u16()?) } else { None };
+        let reply_to = if has_reply_to { Some(Topic::decode(src)?) } else { None };
 
         let header = if has_header {
             let mut header_bytes = src.read_length_prefixed_u16()?;
@@ -80,10 +81,17 @@ impl CommandCodec for Msg {
 
 #[cfg(test)]
 mod tests {
-    use bytes::BytesMut;
+    use bytes::{Bytes, BytesMut};
+    use wire::WireEncode;
 
     use super::*;
     use crate::wire::Headers;
+
+    fn make_topic(raw: &[u8]) -> Topic {
+        let mut buf = BytesMut::new();
+        buf.put_length_prefixed_u16(raw);
+        Topic::decode(&mut buf.freeze()).unwrap()
+    }
 
     fn encode_msg(message: &Msg) -> Bytes {
         let mut buf = BytesMut::new();
@@ -94,7 +102,7 @@ mod tests {
     #[test]
     fn encode_decode_minimal_roundtrip() {
         let original = Msg {
-            topic: Bytes::from_static(b"events.orders"),
+            topic: make_topic(b"events/orders"),
             subscription_id: Bytes::from_static(b"sub-1"),
             reply_to: None,
             header: None,
@@ -103,7 +111,7 @@ mod tests {
         let mut bytes = encode_msg(&original);
         let decoded = Msg::decode(original.flags(), &mut bytes).unwrap();
 
-        assert_eq!(decoded.topic, Bytes::from_static(b"events.orders"));
+        assert_eq!(decoded.topic.as_bytes(), &Bytes::from_static(b"events/orders"));
         assert_eq!(decoded.subscription_id, Bytes::from_static(b"sub-1"));
         assert!(decoded.reply_to.is_none());
         assert!(decoded.header.is_none());
@@ -115,18 +123,18 @@ mod tests {
         let mut header = Headers::new();
         header.insert(Bytes::from_static(b"content-type"), Bytes::from_static(b"application/json"));
         let original = Msg {
-            topic: Bytes::from_static(b"rpc.result"),
+            topic: make_topic(b"rpc/result"),
             subscription_id: Bytes::from_static(b"sub-42"),
-            reply_to: Some(Bytes::from_static(b"inbox.abc")),
+            reply_to: Some(make_topic(b"inbox/abc")),
             header: Some(header),
             payload: Bytes::from_static(b"{\"result\":3}"),
         };
         let mut bytes = encode_msg(&original);
         let decoded = Msg::decode(original.flags(), &mut bytes).unwrap();
 
-        assert_eq!(decoded.topic, Bytes::from_static(b"rpc.result"));
+        assert_eq!(decoded.topic.as_bytes(), &Bytes::from_static(b"rpc/result"));
         assert_eq!(decoded.subscription_id, Bytes::from_static(b"sub-42"));
-        assert_eq!(decoded.reply_to.unwrap(), Bytes::from_static(b"inbox.abc"));
+        assert_eq!(decoded.reply_to.unwrap().as_bytes(), &Bytes::from_static(b"inbox/abc"));
         assert_eq!(decoded.payload, Bytes::from_static(b"{\"result\":3}"));
         let header = decoded.header.unwrap();
         let entries = header.entries();

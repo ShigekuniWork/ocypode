@@ -1,4 +1,5 @@
 use bytes::{Bytes, BytesMut};
+use topic::TopicFilter;
 
 use crate::{
     Command,
@@ -10,7 +11,7 @@ const HAS_QUEUE_GROUP_BIT: u8 = 0x01;
 
 /// Sent by the client to subscribe to a topic or wildcard topic.
 pub struct Sub {
-    pub topic: Bytes,
+    pub topic: TopicFilter,
     pub subscription_id: Bytes,
     pub queue_group: Option<Bytes>,
 }
@@ -25,7 +26,7 @@ impl CommandCodec for Sub {
     }
 
     fn encode(&self, dst: &mut BytesMut) {
-        dst.put_length_prefixed_u16(self.topic.as_ref());
+        self.topic.encode_to(dst);
         dst.put_length_prefixed_u16(self.subscription_id.as_ref());
         if let Some(queue_group) = &self.queue_group {
             dst.put_length_prefixed_u8(queue_group.as_ref());
@@ -35,7 +36,7 @@ impl CommandCodec for Sub {
     fn decode(flags: u8, src: &mut Bytes) -> Result<Self, DecodeError> {
         let has_queue_group = flags & HAS_QUEUE_GROUP_BIT != 0;
 
-        let topic = src.read_length_prefixed_u16()?;
+        let topic = TopicFilter::decode(src)?;
         let subscription_id = src.read_length_prefixed_u16()?;
 
         // TODO: think specification
@@ -47,9 +48,16 @@ impl CommandCodec for Sub {
 
 #[cfg(test)]
 mod tests {
-    use bytes::BytesMut;
+    use bytes::{Bytes, BytesMut};
+    use wire::WireEncode;
 
     use super::*;
+
+    fn make_topic_filter(raw: &[u8]) -> TopicFilter {
+        let mut buf = BytesMut::new();
+        buf.put_length_prefixed_u16(raw);
+        TopicFilter::decode(&mut buf.freeze()).unwrap()
+    }
 
     fn encode_sub(message: &Sub) -> Bytes {
         let mut buf = BytesMut::new();
@@ -60,14 +68,14 @@ mod tests {
     #[test]
     fn encode_decode_without_queue_group_roundtrip() {
         let original = Sub {
-            topic: Bytes::from_static(b"events.>"),
+            topic: make_topic_filter(b"events/orders"),
             subscription_id: Bytes::from_static(b"sub-1"),
             queue_group: None,
         };
         let mut bytes = encode_sub(&original);
         let decoded = Sub::decode(original.flags(), &mut bytes).unwrap();
 
-        assert_eq!(decoded.topic, Bytes::from_static(b"events.>"));
+        assert_eq!(decoded.topic.as_bytes(), &Bytes::from_static(b"events/orders"));
         assert_eq!(decoded.subscription_id, Bytes::from_static(b"sub-1"));
         assert!(decoded.queue_group.is_none());
     }
@@ -75,7 +83,7 @@ mod tests {
     #[test]
     fn has_queue_group_flag_set() {
         let message = Sub {
-            topic: Bytes::from_static(b"topic"),
+            topic: make_topic_filter(b"topic"),
             subscription_id: Bytes::from_static(b"id"),
             queue_group: Some(Bytes::from_static(b"workers")),
         };
@@ -85,7 +93,7 @@ mod tests {
     #[test]
     fn has_queue_group_flag_unset() {
         let message = Sub {
-            topic: Bytes::from_static(b"topic"),
+            topic: make_topic_filter(b"topic"),
             subscription_id: Bytes::from_static(b"id"),
             queue_group: None,
         };
@@ -95,15 +103,28 @@ mod tests {
     #[test]
     fn encode_decode_with_queue_group_roundtrip() {
         let original = Sub {
-            topic: Bytes::from_static(b"tasks.*"),
+            topic: make_topic_filter(b"tasks/+"),
             subscription_id: Bytes::from_static(b"sub-42"),
             queue_group: Some(Bytes::from_static(b"workers")),
         };
         let mut bytes = encode_sub(&original);
         let decoded = Sub::decode(original.flags(), &mut bytes).unwrap();
 
-        assert_eq!(decoded.topic, Bytes::from_static(b"tasks.*"));
+        assert_eq!(decoded.topic.as_bytes(), &Bytes::from_static(b"tasks/+"));
         assert_eq!(decoded.subscription_id, Bytes::from_static(b"sub-42"));
         assert_eq!(decoded.queue_group.unwrap(), Bytes::from_static(b"workers"));
+    }
+
+    #[test]
+    fn encode_decode_wildcard_filter_roundtrip() {
+        let original = Sub {
+            topic: make_topic_filter(b"sensor/+/#"),
+            subscription_id: Bytes::from_static(b"sub-99"),
+            queue_group: None,
+        };
+        let mut bytes = encode_sub(&original);
+        let decoded = Sub::decode(original.flags(), &mut bytes).unwrap();
+
+        assert_eq!(decoded.topic.as_bytes(), &Bytes::from_static(b"sensor/+/#"));
     }
 }

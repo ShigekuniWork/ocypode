@@ -19,7 +19,7 @@ pub mod wire;
 pub use codec::{ClientCodec, ServerCodec};
 pub use error::{DecodeError, EncodeError};
 pub use message::Message;
-pub use wire::{CommandCodec, Headers, Payload, Topic};
+pub use wire::{CommandCodec, Headers, Payload};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
