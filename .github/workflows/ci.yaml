@@ -93,7 +93,7 @@ jobs:
         uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
 
       - name: Install cargo-machete
-        uses: taiki-e/install-action@3216b6964cbfe053bb8b9a2ef245bd9300e2061d # v2.62.14
+        uses: taiki-e/install-action@f92912fad184299a31e22ad070a5059fd07d4f59 # v2.68.7
         with:
           tool: cargo-machete
 
