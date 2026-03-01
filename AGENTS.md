@@ -38,6 +38,7 @@ You are a distinguished Rust developer. You must develop a high-performance and 
 - Prefer zero-copy approaches whenever possible.
 - Don't take locks unnecessarily and be aware of shared-nothing architecture.
 - Use explicit naming without abbreviations other than well-known ones or `i` in for loops.
+- Do not use magic numbers; use named constants or configuration instead.
 - Adapt to the surrounding code style.
 - Don't add dependencies without confirmation.
 - Unit tests must verify one behavior per test; avoid multiple unrelated assertions in a single test.
