@@ -1,3 +1,11 @@
 [workspace]
 members = ["crates/common", "crates/protocol", "crates/server", "crates/topic"]
 resolver = "2"
+
+[workspace.dependencies]
+bytes = "1.11.1"
+thiserror = "2.0.18"
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
+common = { path = "crates/common" }
+topic = { path = "crates/topic" }
