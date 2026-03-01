@@ -20,9 +20,11 @@ version = 2
 
 # List of licenses allowed for dependencies.
 allow = [
-    "MIT",
     "Apache-2.0",
-    "Unicode-3.0"
+    "BSD-3-Clause",
+    "ISC",
+    "MIT",
+    "Unicode-3.0",
 ]
 # The confidence threshold for detecting a license from license text.
 confidence-threshold = 0.95
@@ -33,9 +35,15 @@ confidence-threshold = 0.95
 highlight = "all"
 # The lint level for when a crate version requirement is set to `*`.
 wildcards = "deny"
+# Path/git deps in private crates (e.g. workspace = true) do not emit wildcard errors.
+allow-wildcard-paths = true
 # Lint level for when multiple versions of the same crate are detected.
 multiple-versions = "warn"
 # The default lint level for `default` features for workspace crates.
 workspace-default-features = "allow"
 # The default lint level for `default` features for external crates.
 external-default-features = "allow"
+
+[bans.workspace-dependencies]
+# Include path dependencies so cargo-deny can resolve workspace path deps.
+include-path-dependencies = true

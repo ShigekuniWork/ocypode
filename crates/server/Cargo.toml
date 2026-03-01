@@ -3,13 +3,14 @@ name = "server"
 version = "0.1.0"
 edition = "2024"
 license = "Apache-2.0"
+publish = false
 
 [dependencies]
 anyhow = { workspace = true }
 bytes = { workspace = true }
 common = { workspace = true }
 compio = { workspace = true }
-protocol ={ workspace = true }
+protocol = { workspace = true }
 rcgen = { workspace = true }
 rustls-pki-types = { workspace = true }
 topic = { workspace = true }

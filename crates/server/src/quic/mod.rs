@@ -107,3 +107,13 @@ pub async fn bind(addr: impl ToSocketAddrsAsync) -> Result<Endpoint> {
     info!(local = %endpoint.local_addr()?, "QUIC server listening");
     Ok(endpoint)
 }
+
+/// Binds to `addr` and runs the accept loop until the endpoint is closed.
+pub async fn serve(addr: impl ToSocketAddrsAsync) -> Result<()> {
+    let endpoint = bind(addr).await?;
+    while let Some(incoming) = endpoint.wait_incoming().await {
+        let connection = incoming.await?;
+        info!(remote = ?connection.remote_address(), "QUIC connection accepted");
+    }
+    Ok(())
+}
