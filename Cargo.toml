@@ -3,9 +3,14 @@ members = ["crates/common", "crates/protocol", "crates/server", "crates/topic"]
 resolver = "2"
 
 [workspace.dependencies]
+anyhow = "1.0"
 bytes = "1.11.1"
 thiserror = "2.0.18"
 tracing = "0.1.44"
+compio = { version = "0.18.0", features = ["net", "quic", "ring"] }
 tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
 common = { path = "crates/common" }
 topic = { path = "crates/topic" }
+protocol = { path = "crates/protocol" }
+rcgen = "0.14"
+rustls-pki-types = "1.10"
