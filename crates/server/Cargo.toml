@@ -6,3 +6,5 @@ license = "Apache-2.0"
 
 [dependencies]
 tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
