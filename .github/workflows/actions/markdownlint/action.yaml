@@ -1,0 +1,19 @@
+name: markdownlint
+description: Run markdownlint-cli2
+
+runs:
+  using: composite
+  steps:
+    - name: Checkout sources
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+    - name: Setup Bun
+      uses: oven-sh/setup-bun@ab8cb4e8f89912a29b87e4abc4554f2301648a5c # v1.0.4
+
+    - name: Install dependencies
+      shell: bash
+      run: bun install --frozen-lockfile
+
+    - name: Lint markdown
+      shell: bash
+      run: bunx markdownlint-cli2 "**/*.md" "**/*.mdx"
