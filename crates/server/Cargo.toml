@@ -4,7 +4,11 @@ version = "0.1.0"
 edition = "2024"
 license = "Apache-2.0"
 
+[features]
+profiling = ["dep:pprof"]
+
 [dependencies]
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
+pprof = { version = "0.15.0", features = ["flamegraph", "protobuf-codec"], optional = true }
