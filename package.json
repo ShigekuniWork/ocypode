@@ -1,0 +1,15 @@
+{
+	"name": "ocypode",
+	"version": "0.0.0",
+	"private": true,
+	"dependencies": {
+		"markdownlint-cli2": "^0.21.0"
+	},
+	"devDependencies": {
+		"husky": "9.1.7",
+		"lint-staged": "16.3.1"
+	},
+	"scripts": {
+		"prepare": "husky"
+	}
+}

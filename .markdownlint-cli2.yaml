@@ -1,0 +1,11 @@
+config:
+  default: true
+  MD013:
+    line_length: 120
+    tables: false
+  MD033:
+    allowed_elements: [details, summary, img]
+  MD041: false
+
+# Use .gitignore (and .gitignore files up to repo root) to skip files
+gitignore: true
