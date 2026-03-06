@@ -6,3 +6,9 @@ resolver = "2"
 tokio = { version = "1.50.0", features = ["full"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
+pprof = { version = "0.15.0", features = ["flamegraph", "protobuf-codec"] }
+s2n-quic = "1.76.0"
+serde = { version = "1", features = ["derive"] }
+serde_yaml = "0.9"
+clap = { version = "4", features = ["derive"] }
+

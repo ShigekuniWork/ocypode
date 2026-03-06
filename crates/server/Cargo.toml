@@ -11,8 +11,8 @@ profiling = ["dep:pprof"]
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
-pprof = { version = "0.15.0", features = ["flamegraph", "protobuf-codec"], optional = true }
-s2n-quic = "1.76.0"
-serde = { version = "1", features = ["derive"] }
-serde_yaml = "0.9"
-clap = { version = "4", features = ["derive"] }
+pprof = { workspace = true, optional = true }
+s2n-quic = { workspace = true }
+serde = { workspace = true }
+serde_yaml = { workspace = true }
+clap = { workspace = true }
