@@ -12,7 +12,16 @@ runs:
 
     - name: Install dependencies
       shell: bash
-      run: bun install --frozen-lockfile
+      run: |
+        bun install --frozen-lockfile
+
+        # If katex was published with a build placeholder, replace it so runtime doesn't error.
+        # This patches node_modules/katex/dist/katex.mjs to set a concrete version string.
+        KATEX_FILE="node_modules/katex/dist/katex.mjs"
+        if [ -f "$KATEX_FILE" ]; then
+          # Replace `const version = __VERSION__;` with the known installed version.
+          sed -i 's/const version = __VERSION__;/const version = "0.16.34";/' "$KATEX_FILE" || true
+        fi
 
     - name: Lint markdown
       shell: bash
