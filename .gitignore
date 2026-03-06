@@ -391,3 +391,10 @@ package
 
 ### Qlog ###
 *.qlog.
+
+### Certs ###
+*.key
+*.csr
+*.srl
+*.pem
+*.crt
