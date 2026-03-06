@@ -8,7 +8,7 @@ runs:
       uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
     - name: Setup Bun
-      uses: oven-sh/setup-bun@ab8cb4e8f89912a29b87e4abc4554f2301648a5c # v1.0.4
+      uses: oven-sh/setup-bun@f4d14e03ff726c06358e5557344e1da148b56cf7 # v1.2.2
 
     - name: Install dependencies
       shell: bash
