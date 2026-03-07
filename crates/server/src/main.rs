@@ -10,6 +10,7 @@ use crate::{log::Logging, profiler::Profiler};
 
 mod log;
 mod profiler;
+mod protocol;
 mod quic;
 
 #[derive(Debug, Parser)]
