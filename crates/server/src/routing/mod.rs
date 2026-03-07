@@ -3,8 +3,7 @@ use std::{collections::HashSet, sync::Arc};
 use bytes::Bytes;
 use dashmap::DashMap;
 
-use crate::subscriber::Subscriber;
-use crate::topic::Topic;
+use crate::{subscriber::Subscriber, topic::Topic};
 
 type Subscribers = DashMap<String, Subscriber>;
 type SubscribingTopics = DashMap<String, HashSet<Topic>>;
