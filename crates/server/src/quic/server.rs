@@ -8,9 +8,10 @@ use tracing::{debug, info};
 
 use crate::{
     config::Config,
-    core::{Subscriber, Topic},
     protocol::{ProtocolCodec, ServerCodec, ServerInbound},
     routing::Router,
+    subscriber::Subscriber,
+    topic::Topic,
 };
 
 pub async fn start(config: &Config) -> Result<(), Box<dyn Error>> {

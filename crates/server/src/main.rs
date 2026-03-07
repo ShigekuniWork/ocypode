@@ -3,7 +3,8 @@ use std::path::PathBuf;
 use anyhow::Result;
 use clap::Parser;
 mod config;
-mod core;
+mod subscriber;
+mod topic;
 use config::Config;
 use tracing::{error, info};
 
