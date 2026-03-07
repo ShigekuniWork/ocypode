@@ -3,10 +3,6 @@
 // integration is still in progress. Remove or reconcile these once a full client
 // implementation is wired in.
 #![allow(dead_code)]
-// TODO: Temporary crate-level allow(dead_code).
-// Remove this attribute once the client implementation is wired and
-// the currently-unused client codec items are actually referenced.
-// This suppresses dead_code warnings during incremental development.
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use thiserror::Error;
 
