@@ -14,4 +14,3 @@ server = { path = "../server" }
 tokio = { workspace = true }
 s2n-quic = { workspace = true }
 bytes = { workspace = true }
-anyhow = { workspace = true }

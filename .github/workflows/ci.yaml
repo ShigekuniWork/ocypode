@@ -74,6 +74,9 @@ jobs:
       - name: Check
         run: cargo check --all-features
 
+      - name: Generate test certs
+        run: ./crates/tests/certs/generate_certs.sh
+
       - name: Test
         run: cargo test --all-features
 
