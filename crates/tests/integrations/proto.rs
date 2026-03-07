@@ -13,7 +13,7 @@ async fn test_protocol_basic() {
 
     // 1. PING → PONG
     {
-        let mut stream = connect_client(addr).await;
+        let mut stream = connect_client(addr, server.cert_path()).await;
 
         send(&mut stream, &ClientOutbound::Ping).await;
         let response = recv(&mut stream).await;
@@ -23,7 +23,7 @@ async fn test_protocol_basic() {
 
     // 2. SUB → Ok
     {
-        let mut stream = connect_client(addr).await;
+        let mut stream = connect_client(addr, server.cert_path()).await;
 
         send(
             &mut stream,
@@ -42,7 +42,7 @@ async fn test_protocol_basic() {
 
     // 3 & 4. PUB + MSG delivery
     {
-        let mut sub_stream = connect_client(addr).await;
+        let mut sub_stream = connect_client(addr, server.cert_path()).await;
 
         // Subscribe first
         send(
@@ -64,7 +64,7 @@ async fn test_protocol_basic() {
         );
 
         // Publish from a separate stream / connection
-        let mut pub_stream = connect_client(addr).await;
+        let mut pub_stream = connect_client(addr, server.cert_path()).await;
 
         send(
             &mut pub_stream,

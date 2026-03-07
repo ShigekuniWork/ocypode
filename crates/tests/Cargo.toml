@@ -3,6 +3,7 @@ name = "tests"
 version = "0.1.0"
 edition = "2024"
 license = "Apache-2.0"
+publish = false
 
 [[test]]
 name = "integrations"
@@ -14,3 +15,5 @@ server = { path = "../server" }
 tokio = { workspace = true }
 s2n-quic = { workspace = true }
 bytes = { workspace = true }
+rcgen = { workspace = true }
+tempfile = { workspace = true }

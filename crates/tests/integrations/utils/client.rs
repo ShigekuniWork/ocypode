@@ -6,11 +6,12 @@ use server::protocol::{ClientCodec, ClientInbound, ClientOutbound, ProtocolCodec
 
 /// Connect a QUIC client to the given server address and open a
 /// bidirectional stream. Returns the stream ready for send/receive.
-pub async fn connect_client(addr: SocketAddr) -> s2n_quic::stream::BidirectionalStream {
-    let cert_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("certs/server.crt");
-
+pub async fn connect_client(
+    addr: SocketAddr,
+    cert_path: &std::path::Path,
+) -> s2n_quic::stream::BidirectionalStream {
     let client = Client::builder()
-        .with_tls(cert_path.as_path())
+        .with_tls(cert_path)
         .expect("failed to configure client TLS")
         .with_io("0.0.0.0:0")
         .expect("failed to bind client")
