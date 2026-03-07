@@ -57,12 +57,12 @@ profile:
 # Generate TLS certificates for tests and dev
 generate_certs:
     @echo "Generating TLS certificates..."
-    @bash crates/test_util/src/certs/generate_certs.sh
+    @bash crates/tests/certs/generate_certs.sh
 
 # Run server in dev mode with dev-config.yaml
 dev:
     @echo "Starting server in dev mode..."
-    @cargo run -p server -- --config crates/test_util/src/configs/dev-config.yaml
+    @cargo run -p server -- --config crates/tests/configs/dev-config.yaml
 
 # Run preflight checks
 preflight:

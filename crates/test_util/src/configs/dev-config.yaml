@@ -1,5 +1,0 @@
-quic:
-  endpoint: "127.0.0.1:4433"
-  tls:
-    cert_path: "crates/test_util/src/certs/server.crt"
-    private_key: "crates/test_util/src/certs/key.pem"
