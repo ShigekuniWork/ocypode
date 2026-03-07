@@ -1,0 +1,17 @@
+[package]
+name = "tests"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+
+[[test]]
+name = "integrations"
+path = "integrations/mod.rs"
+harness = true
+
+[dependencies]
+server = { path = "../server" }
+tokio = { workspace = true }
+s2n-quic = { workspace = true }
+bytes = { workspace = true }
+anyhow = { workspace = true }
