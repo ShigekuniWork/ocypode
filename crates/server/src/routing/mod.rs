@@ -32,6 +32,12 @@ pub struct Router {
     subscribing_topics: SubscribingTopics,
 }
 
+impl Default for Router {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Router {
     pub fn new() -> Self {
         Router { root: Arc::new(Node::new()), subscribing_topics: SubscribingTopics::new() }
@@ -87,13 +93,19 @@ impl Router {
     //       Currently publish only does exact trie traversal. To support wildcards,
     //       subscribe should store `+` and `#` as child keys in the trie, and
     //       publish should branch into wildcard children at each layer during lookup.
-    pub fn publish(&self, topic: &Topic, payload: Bytes) {
+    /// Deliver `frame` to every subscriber registered under `topic`.
+    ///
+    /// `frame` must already be a fully-encoded wire frame. The caller is
+    /// responsible for building one frame per subscriber (because the frame
+    /// includes the per-subscriber subscription_id) and passing it here.
+    pub fn publish(&self, topic: &Topic, frame_fn: impl Fn(&Subscriber) -> Bytes) {
         let Some(node) = self.find_node(topic) else {
             return;
         };
 
         for entry in node.subscribe_map.iter() {
-            entry.value().send(payload.clone());
+            let subscriber = entry.value();
+            subscriber.send(frame_fn(subscriber));
         }
     }
 }
@@ -128,7 +140,7 @@ mod tests {
         let (sub, mut rx) = make_subscriber("alice");
 
         router.subscribe(t.clone(), sub);
-        router.publish(&t, payload("hello"));
+        router.publish(&t, |_sub| payload("hello"));
 
         assert_eq!(rx.recv().await.unwrap(), payload("hello"));
     }
@@ -136,7 +148,7 @@ mod tests {
     #[tokio::test]
     async fn publish_to_unknown_topic_does_nothing() {
         let router = setup();
-        router.publish(&topic("unknown/topic"), payload("data"));
+        router.publish(&topic("unknown/topic"), |_sub| payload("data"));
     }
 
     #[tokio::test]
@@ -147,7 +159,7 @@ mod tests {
 
         router.subscribe(t.clone(), sub);
         router.un_subscribe("alice", &t);
-        router.publish(&t, payload("after unsubscribe"));
+        router.publish(&t, |_sub| payload("after unsubscribe"));
 
         assert!(rx.try_recv().is_err());
     }
@@ -161,7 +173,7 @@ mod tests {
 
         router.subscribe(t.clone(), sub1);
         router.subscribe(t.clone(), sub2);
-        router.publish(&t, payload("broadcast"));
+        router.publish(&t, |_sub| payload("broadcast"));
 
         assert_eq!(rx1.recv().await.unwrap(), payload("broadcast"));
         assert_eq!(rx2.recv().await.unwrap(), payload("broadcast"));
@@ -176,7 +188,7 @@ mod tests {
 
         router.subscribe(t.clone(), sub1);
         router.subscribe(t.clone(), sub2);
-        router.publish(&t, payload("once"));
+        router.publish(&t, |_sub| payload("once"));
 
         assert_eq!(rx.recv().await.unwrap(), payload("once"));
         assert!(rx.try_recv().is_err());
