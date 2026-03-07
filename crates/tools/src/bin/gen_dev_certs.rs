@@ -17,7 +17,7 @@ fn main() {
         rcgen::generate_simple_self_signed(vec!["localhost".into(), "127.0.0.1".into()]).unwrap();
 
     fs::write(&cert_path, cert.cert.pem()).expect("failed to write server.crt");
-    fs::write(&key_path, cert.key_pair.serialize_pem()).expect("failed to write key.pem");
+    fs::write(&key_path, cert.signing_key.serialize_pem()).expect("failed to write key.pem");
 
     println!("Generated:");
     println!("  cert: {}", cert_path.display());

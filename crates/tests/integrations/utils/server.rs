@@ -17,7 +17,7 @@ fn test_config() -> (Config, tempfile::TempDir, std::path::PathBuf) {
     let key_path = temp_dir.path().join("key.pem");
 
     fs::write(&cert_path, cert.cert.pem()).unwrap();
-    fs::write(&key_path, cert.key_pair.serialize_pem()).unwrap();
+    fs::write(&key_path, cert.signing_key.serialize_pem()).unwrap();
 
     let config = Config {
         quic: QuicConfig { endpoint: "127.0.0.1:0".to_string() },
