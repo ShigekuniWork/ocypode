@@ -11,7 +11,7 @@ use crate::{
     protocol::{ProtocolCodec, ServerCodec, ServerInbound},
     routing::Router,
     subscriber::Subscriber,
-    topic::Topic,
+    topic::{Topic, TopicKind},
 };
 
 pub async fn start(config: &Config) -> Result<(), Box<dyn Error>> {
@@ -70,11 +70,18 @@ pub async fn start(config: &Config) -> Result<(), Box<dyn Error>> {
 fn handle_inbound(router: &Router, conn_id: &str, tx: mpsc::Sender<Bytes>, msg: ServerInbound) {
     match msg {
         ServerInbound::Sub { topic, subscription_id, .. } => {
-            let topic = Topic::new(topic.freeze());
-            let sub_id = String::from_utf8_lossy(&subscription_id).into_owned();
-            let id = format!("{conn_id}/{sub_id}");
-            let subscriber = Subscriber::new(id, tx);
-            router.subscribe(topic, subscriber);
+            match Topic::parse(topic.freeze(), TopicKind::Subscribe) {
+                Ok(topic) => {
+                    let sub_id = String::from_utf8_lossy(&subscription_id).into_owned();
+                    let id = format!("{conn_id}/{sub_id}");
+                    let subscriber = Subscriber::new(id, tx);
+                    router.subscribe(topic, subscriber);
+                }
+                Err(e) => {
+                    tracing::warn!("invalid subscribe topic: {e}");
+                    // TODO: send Err(InvalidTopic) back to the client
+                }
+            }
         }
         ServerInbound::Unsub { subscription_id } => {
             let sub_id = String::from_utf8_lossy(&subscription_id).into_owned();
@@ -84,8 +91,15 @@ fn handle_inbound(router: &Router, conn_id: &str, tx: mpsc::Sender<Bytes>, msg: 
             router.un_subscribe(&id, &placeholder);
         }
         ServerInbound::Pub { topic, payload, .. } => {
-            let topic = Topic::new(topic.freeze());
-            router.publish(&topic, payload);
+            match Topic::parse(topic.freeze(), TopicKind::Publish) {
+                Ok(topic) => {
+                    router.publish(&topic, payload);
+                }
+                Err(e) => {
+                    tracing::warn!("invalid publish topic: {e}");
+                    // TODO: send Err(InvalidTopic) back to the client
+                }
+            }
         }
         ServerInbound::Connect { version, .. } => {
             debug!("client connected with protocol version {version}");

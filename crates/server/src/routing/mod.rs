@@ -9,20 +9,17 @@ type Subscribers = DashMap<String, Subscriber>;
 type SubscribingTopics = DashMap<String, HashSet<Topic>>;
 
 struct Node {
-    #[allow(dead_code)]
-    has_wildcard: bool,
     subscribe_map: Subscribers,
-    // children are Arc<Node> so we can clone and hold them across iterations without borrowing guards
     children: DashMap<Bytes, Arc<Node>>,
 }
 
 impl Node {
-    fn new(has_wildcard: bool) -> Self {
-        Node { has_wildcard, subscribe_map: Subscribers::new(), children: DashMap::new() }
+    fn new() -> Self {
+        Node { subscribe_map: Subscribers::new(), children: DashMap::new() }
     }
 
     fn get_or_create_child(&self, segment: Bytes) -> Arc<Node> {
-        self.children.entry(segment).or_insert_with(|| Arc::new(Node::new(false))).value().clone()
+        self.children.entry(segment).or_insert_with(|| Arc::new(Node::new())).value().clone()
     }
 
     fn get_child(&self, segment: &Bytes) -> Option<Arc<Node>> {
@@ -37,13 +34,13 @@ pub struct Router {
 
 impl Router {
     pub fn new() -> Self {
-        Router { root: Arc::new(Node::new(false)), subscribing_topics: SubscribingTopics::new() }
+        Router { root: Arc::new(Node::new()), subscribing_topics: SubscribingTopics::new() }
     }
 
     fn get_or_create_node(&self, topic: &Topic) -> Arc<Node> {
         let mut current = Arc::clone(&self.root);
         for segment in topic.segments() {
-            current = current.get_or_create_child(segment);
+            current = current.get_or_create_child(Bytes::copy_from_slice(segment));
         }
         current
     }
@@ -51,7 +48,8 @@ impl Router {
     fn find_node(&self, topic: &Topic) -> Option<Arc<Node>> {
         let mut current = Arc::clone(&self.root);
         for segment in topic.segments() {
-            current = current.get_child(&segment)?;
+            let key = Bytes::copy_from_slice(segment);
+            current = current.get_child(&key)?;
         }
         Some(current)
     }
@@ -85,6 +83,10 @@ impl Router {
         }
     }
 
+    // TODO: Support wildcard matching (`+` single-layer and `#` multi-layer).
+    //       Currently publish only does exact trie traversal. To support wildcards,
+    //       subscribe should store `+` and `#` as child keys in the trie, and
+    //       publish should branch into wildcard children at each layer during lookup.
     pub fn publish(&self, topic: &Topic, payload: Bytes) {
         let Some(node) = self.find_node(topic) else {
             return;
