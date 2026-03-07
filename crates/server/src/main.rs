@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use anyhow::Result;
 use clap::Parser;
 mod config;
+mod core;
 use config::Config;
 use tracing::{error, info};
 
@@ -12,6 +13,7 @@ mod log;
 mod profiler;
 mod protocol;
 mod quic;
+mod routing;
 
 #[derive(Debug, Parser)]
 #[command(about = "Ocypode QUIC server")]
