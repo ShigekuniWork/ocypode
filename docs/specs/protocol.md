@@ -18,16 +18,16 @@ more reliable transport than TCP-based protocols.
 - Low bandwidth overhead through compact binary encoding
 - Simple Pub/Sub messaging semantics
 - Minimal parsing complexity for high-throughput implementations
-- Efficient operation on modern hardware (x86\_64, AArch64)
+- Efficient operation on modern hardware (x86_64, AArch64)
 
 ## Notation Conventions
 
 ### Byte Order
 
-All multi-byte integer fields in this protocol are encoded in **little-endian**
-byte order.
+All multi-byte integer fields in this protocol are encoded in
+**little-endian** byte order.
 
-**Rationale**: The dominant processor architectures today — x86\_64 and AArch64
+**Rationale**: The dominant processor architectures today — x86_64 and AArch64
 (running in little-endian mode) — natively use little-endian byte order.
 Adopting little-endian for the wire format eliminates byte-swap overhead on
 these platforms, allows zero-copy type casting for fixed-size fields, and
@@ -40,15 +40,24 @@ Bit positions within a byte are numbered from **0** (least significant bit) to
 
 ```mermaid
 packet
-  7: "7 (MSB)"
-  6: "6"
-  5: "5"
-  4: "4"
-  3: "3"
-  2: "2"
-  1: "1"
   0: "0 (LSB)"
+  1: "1"
+  2: "2"
+  3: "3"
+  4: "4"
+  5: "5"
+  6: "6"
+  7: "7 (MSB)"
 ```
+
+Note:
+
+- Bits are numbered 0..7 where 0 = LSB and 7 = MSB.
+- The diagram shows logical bit positions inside a byte.
+  Multi-byte numeric fields are encoded in little-endian on the wire (see
+  "Byte Order" above); the diagram does not change the endianness semantics.
+- Where ranges are shown in diagrams they must be ascending (start ≤ end) to
+  comply with rendering tools.
 
 ### Reserved Fields
 
@@ -121,16 +130,33 @@ packet
   24-39: "Payload (optional)"
 ```
 
+Note:
+
+- The diagram shows logical byte ranges and is intended to be illustrative.
+- For variable-length fields, the diagram indicates starting offsets;
+  consult the textual field descriptions for exact parsing.
+
 ### Fixed Header
 
 The fixed header is present in **every** message.
 
 ```mermaid
 packet
-  7-4: "Command (4 bits)"
-  3-0: "Flags (4 bits)"
-  15-8: "Remaining Length (varint, 1–4 bytes)"
+  0-3: "Flags (4 bits)"
+  4-7: "Command (4 bits)"
+  8-15: "Remaining Length (varint, 1–4 bytes)"
 ```
+
+Clarification:
+
+- Byte 0:
+  - Bits 4–7 carry the `command` (4 bits).
+  - Bits 0–3 carry the `flags` (4 bits).
+- Bit numbering uses 0 = LSB ... 7 = MSB.
+- The `remaining_length` immediately follows byte 0 and is encoded as the
+  varint described earlier (least-significant-group first).
+- The textual field descriptions (e.g., "Bits 7–4 of byte 0") remain
+  authoritative; the diagram is a visual aid only.
 
 | Field              | Bits / Size        | Description                                                                                         |
 | ------------------ | ------------------ | --------------------------------------------------------------------------------------------------- |
@@ -140,8 +166,11 @@ packet
 
 ### Variable Header
 
-Command-specific fields that follow the fixed header. The structure varies per
-command and is defined in each command's section below.
+Command-specific fields that follow the fixed header. Fixed-size prefix fields
+are shown in compact diagrams for readability; variable-length fields are
+described with exact byte-range formulas relative to the start of the variable
+header (offset 0 is the first byte of the variable header). Use the parsing
+steps to calculate concrete offsets during implementation.
 
 ### Payload
 
@@ -182,18 +211,57 @@ message before sending `CONNECT`.
 
 All reserved (MUST be `0`).
 
-#### Variable Header
+#### Variable Header (fixed prefix shown)
+
+The variable header begins with fixed-size fields followed by variable-length
+fields. The mermaid diagram below shows the fixed prefix (fields with
+deterministic size). Variable-length fields are listed in prose with exact
+byte-range formulas relative to the start of the variable header (variable
+header offset 0).
 
 ```mermaid
 packet
-  7-0: "version (1 B)"
-  39-8: "max_payload (4 B, uint32 LE)"
-  47-40: "server_id_length (1 B)"
-  55-48: "server_id (server_id_length B)"
-  63-56: "server_name_length (1 B)"
-  71-64: "server_name (server_name_length B)"
-  79-72: "capability_flags (1 B)"
+  0-7: "version (1 B)"
+  8-39: "max_payload (4 B, uint32 LE)"
+  40-47: "server_id_length (1 B)"
 ```
+
+Variable fields and exact byte-range formulas (offsets are relative to
+variable header start):
+
+- `server_id`:
+  - Start offset: 48
+  - End offset: 48 + server_id_length - 1
+  - Byte-range formula: bytes 48..(48 + server_id_length - 1)
+- `server_name_length`:
+  - Start offset: 48 + server_id_length
+  - End offset: start (single byte)
+  - Byte-range: byte (48 + server_id_length)
+- `server_name`:
+  - Start offset: 49 + server_id_length
+  - End offset: 49 + server_id_length + server_name_length - 1
+  - Byte-range formula:
+    bytes (49 + server_id_length)..
+    (49 + server_id_length + server_name_length - 1)
+- `capability_flags`:
+  - Start offset: 49 + server_id_length + server_name_length
+  - End offset: same (single byte)
+  - Byte-range: byte (49 + server_id_length + server_name_length)
+
+Parsing steps (authoritative):
+
+1. Read `version` (variable header offset 0).
+2. Read `max_payload` (offsets 8..11 relative to variable header start).
+3. Read `server_id_length` (offset 40).
+4. Read `server_id` of `server_id_length` bytes at offsets
+   48..(48+server_id_length-1).
+5. Read `server_name_length` (1 byte) at offset
+   (48 + server_id_length).
+6. Read `server_name` of `server_name_length` bytes at offsets
+   (49 + server_id_length)..
+   (49 + server_id_length + server_name_length - 1).
+7. Read `capability_flags` at offset
+   (49 + server_id_length + server_name_length).
 
 | Field                | Type        | Size                  | Description                                                      |
 | -------------------- | ----------- | --------------------- | ---------------------------------------------------------------- |
@@ -230,15 +298,37 @@ version, options, and optional authentication credentials.
 | 1   | `has_auth` | `1`: authentication fields are present in the variable header.            |
 | 2–3 | reserved   | MUST be `0`.                                                              |
 
-#### Variable Header
+#### Variable Header (fixed prefix shown)
 
 ```mermaid
 packet
-  7-0: "version (1 B)"
-  15-8: "auth_type (1 B, if has_auth=1)"
-  23-16: "auth_payload_length (varint, if has_auth=1)"
-  31-24: "auth_payload (auth_payload_length B, if has_auth=1)"
+  0-7: "version (1 B)"
 ```
+
+Variable fields and exact byte-range formulas (offsets relative to variable
+header start):
+
+- If `has_auth = 1`:
+  - `auth_type`: byte at offset 8 (byte 8).
+  - `auth_payload_length` (varint): starts at offset 9 and occupies 1–4
+    bytes. Let auth_payload_length_varint_size be the varint size in bytes;
+    the varint occupies offsets 9..(9 + auth_payload_length_varint_size - 1).
+  - `auth_payload`: starts at offset (9 + auth_payload_length_varint_size) and
+    spans `auth_payload_length` bytes. Byte-range:
+    (9 + auth_payload_length_varint_size)..
+    (9 + auth_payload_length_varint_size + auth_payload_length - 1)
+- If `has_auth = 0`:
+  - No fields follow `version`.
+
+Parsing steps:
+
+1. Read `version` at offset 0.
+2. If `has_auth=1`:
+   a. Read `auth_type` at offset 8.
+   b. Read the varint `auth_payload_length` starting at offset 9 (varint
+      size 1–4 bytes).
+   c. Read `auth_payload` of length `auth_payload_length` starting
+      immediately after the varint.
 
 | Field                 | Type   | Size                  | Description                                              |
 | --------------------- | ------ | --------------------- | -------------------------------------------------------- |
@@ -246,8 +336,6 @@ packet
 | `auth_type`           | uint8  | 1 byte                | Authentication method. Only present when `has_auth=1`.   |
 | `auth_payload_length` | varint | 1–4 bytes             | Byte length of `auth_payload`. Only when `has_auth=1`.   |
 | `auth_payload`        | bytes  | `auth_payload_length` | Authentication data. Only present when `has_auth=1`.     |
-
-When `has_auth=0`, all fields after `version` are absent.
 
 **`auth_type` values**:
 
@@ -271,17 +359,57 @@ Publishes a message to the specified topic.
 | 0   | `has_header` | `1`: optional header section is present.  |
 | 1–3 | reserved     | MUST be `0`.                              |
 
-#### Variable Header & Payload
+#### Variable Header & Payload (fixed-prefix shown)
 
 ```mermaid
 packet
-  15-0: "topic_length (2 B, uint16 LE)"
-  23-16: "topic (topic_length B)"
-  39-24: "header_size (2 B, uint16 LE, if has_header=1)"
-  47-40: "header (header_size B, if has_header=1)"
-  55-48: "payload_size (varint)"
-  63-56: "payload (payload_size B)"
+  0-15: "topic_length (2 B, uint16 LE)"
 ```
+
+Variable fields and exact byte-range formulas (offsets relative to variable
+header start):
+
+- `topic`:
+  - Start offset: 16
+  - End offset: 16 + topic_length - 1
+  - Byte-range formula: bytes 16..(16 + topic_length - 1)
+- If `has_header = 1`:
+  - `header_size`:
+    - Start offset: 16 + topic_length
+    - End offset: 17 + topic_length
+    - Byte-range:
+      bytes (16 + topic_length)..
+      (17 + topic_length)
+    - (2 bytes, uint16 LE)
+  - `header`:
+    - Start offset: 18 + topic_length
+    - End offset: 18 + topic_length + header_size - 1
+    - Byte-range:
+      bytes (18 + topic_length)..
+      (18 + topic_length + header_size - 1)
+- `payload_size` (varint):
+  - Starts at offset:
+    - If `has_header=1`: (18 + topic_length + header_size)
+    - If `has_header=0`: (16 + topic_length)
+  - Occupies 1–4 bytes; let payload_varint_start denote that start offset,
+    and payload_varint_size be its byte length.
+  - `payload`:
+    - Start offset: payload_varint_start + payload_varint_size
+    - End offset: payload_start + payload_size - 1
+    - Byte-range formula:
+      bytes (payload_varint_start + payload_varint_size)..
+      (payload_varint_start + payload_varint_size + payload_size - 1)
+
+Parsing steps:
+
+1. Read `topic_length` at offsets 0..1 (relative to variable header).
+2. Read `topic` at bytes 16..(16 + topic_length - 1).
+3. If `has_header=1`, read `header_size` (2 bytes LE) at bytes
+   (16 + topic_length)..(17 + topic_length), then `header` at bytes
+   (18 + topic_length)..(18 + topic_length + header_size - 1).
+4. Read `payload_size` varint at the offset that follows header (or topic if
+   no header).
+5. Read `payload` bytes of length `payload_size` following the varint.
 
 | Field          | Type        | Size           | Description                                                     |
 | -------------- | ----------- | -------------- | --------------------------------------------------------------- |
@@ -291,6 +419,11 @@ packet
 | `header`       | bytes       | `header_size`  | Key-value header data. Only present when `has_header=1`.        |
 | `payload_size` | varint      | 1–4 bytes      | Byte length of `payload`.                                       |
 | `payload`      | bytes       | `payload_size` | Application data.                                               |
+
+Implementation note: calculated offsets above are relative to the start of the
+variable header (i.e., variable header offset 0). Fixed header bytes consume
+preceding bytes on the wire; when implementing, add the fixed-header length to
+compute absolute wire offsets if needed.
 
 ---
 
@@ -307,17 +440,54 @@ Subscribes to a topic. Wildcard patterns are supported in the topic name.
 | 0   | `has_queue_group` | `1`: queue group fields are present.      |
 | 1–3 | reserved          | MUST be `0`.                              |
 
-#### Variable Header
+#### Variable Header (fixed-prefix shown)
 
 ```mermaid
 packet
-  15-0: "topic_length (2 B, uint16 LE)"
-  23-16: "topic (topic_length B)"
-  39-24: "subscription_id_length (2 B, uint16 LE)"
-  47-40: "subscription_id (subscription_id_length B)"
-  55-48: "queue_group_length (1 B, if has_queue_group=1)"
-  63-56: "queue_group (queue_group_length B, if has_queue_group=1)"
+  0-15: "topic_length (2 B, uint16 LE)"
 ```
+
+Variable fields and exact byte-range formulas (offsets relative to variable
+header start):
+
+- `topic`:
+  - Start offset: 16
+  - End offset: 16 + topic_length - 1
+  - Byte-range: bytes 16..(16 + topic_length - 1)
+- `subscription_id_length`:
+  - Start offset: 16 + topic_length
+  - End offset: 17 + topic_length
+  - Byte-range:
+    bytes (16 + topic_length)..
+    (17 + topic_length) (2 bytes, uint16 LE)
+- `subscription_id`:
+  - Start offset: 18 + topic_length
+  - End offset: 18 + topic_length + subscription_id_length - 1
+  - Byte-range:
+    bytes (18 + topic_length)..
+    (18 + topic_length + subscription_id_length - 1)
+- If `has_queue_group = 1`:
+  - `queue_group_length`:
+    - Start offset: 18 + topic_length + subscription_id_length
+    - Byte-range:
+      byte (18 + topic_length + subscription_id_length)
+  - `queue_group`:
+    - Start offset: 19 + topic_length + subscription_id_length
+    - End offset:
+      19 + topic_length + subscription_id_length + queue_group_length - 1
+    - Byte-range:
+      bytes (19 + topic_length + subscription_id_length)..
+      (19 + topic_length + subscription_id_length + queue_group_length - 1)
+
+Parsing steps:
+
+1. Read `topic_length` (2 bytes, little-endian) at VH_BASE + 0.
+2. Read `topic` of `topic_length` bytes at VH_BASE + 2 (i.e. bytes 16..).
+3. Read `subscription_id_length` (2 bytes, little-endian) immediately after
+   topic.
+4. Read `subscription_id` of `subscription_id_length` bytes.
+5. If `has_queue_group=1`, read `queue_group_length` (1 byte) and then
+   `queue_group`.
 
 | Field                    | Type        | Size                     | Description                                                            |
 | ------------------------ | ----------- | ------------------------ | ---------------------------------------------------------------------- |
@@ -340,13 +510,24 @@ Cancels an existing subscription.
 
 All reserved (MUST be `0`).
 
-#### Variable Header
+#### Variable Header (fixed-prefix shown)
 
 ```mermaid
 packet
-  15-0: "subscription_id_length (2 B, uint16 LE)"
-  23-16: "subscription_id (subscription_id_length B)"
+  0-15: "subscription_id_length (2 B, uint16 LE)"
 ```
+
+Variable fields and exact byte-range formulas:
+
+- `subscription_id`:
+  - Start offset: 16
+  - End offset: 16 + subscription_id_length - 1
+  - Byte-range: bytes 16..(16 + subscription_id_length - 1)
+
+Parsing:
+
+1. Read `subscription_id_length` at offsets 0..1 (variable header).
+2. Read `subscription_id` at bytes 16..(16 + subscription_id_length - 1).
 
 | Field                    | Type        | Size                     | Description                                             |
 | ------------------------ | ----------- | ------------------------ | ------------------------------------------------------- |
@@ -368,19 +549,53 @@ Delivers a published message to a subscribed client.
 | 0   | `has_header` | `1`: optional header section is present.  |
 | 1–3 | reserved     | MUST be `0`.                              |
 
-#### Variable Header & Payload
+#### Variable Header & Payload (fixed-prefix shown)
 
 ```mermaid
 packet
-  15-0: "topic_length (2 B, uint16 LE)"
-  23-16: "topic (topic_length B)"
-  39-24: "subscription_id_length (2 B, uint16 LE)"
-  47-40: "subscription_id (subscription_id_length B)"
-  63-48: "header_size (2 B, uint16 LE, if has_header=1)"
-  71-64: "header (header_size B, if has_header=1)"
-  79-72: "payload_size (varint)"
-  87-80: "payload (payload_size B)"
+  0-15: "topic_length (2 B, uint16 LE)"
 ```
+
+Variable fields and exact byte-range formulas (offsets relative to variable
+header start):
+
+- `topic`:
+  - bytes 16..(16 + topic_length - 1)
+- `subscription_id_length`:
+  - bytes (16 + topic_length)..
+    (17 + topic_length) (2 bytes, uint16 LE)
+- `subscription_id`:
+  - bytes (18 + topic_length)..
+    (18 + topic_length + subscription_id_length - 1)
+- If `has_header = 1`:
+  - `header_size`:
+    - bytes (18 + topic_length + subscription_id_length)..
+      (19 + topic_length + subscription_id_length) (2 bytes LE)
+  - `header`:
+    - bytes (20 + topic_length + subscription_id_length)..
+      (20 + topic_length + subscription_id_length + header_size - 1)
+- `payload_size` (varint):
+  - starts at offset:
+    - If `has_header=1`:
+      20 + topic_length + subscription_id_length + header_size
+    - Else: 18 + topic_length + subscription_id_length
+  - occupies 1–4 bytes
+- `payload`:
+  - follows the varint; start = payload_varint_start + payload_varint_size
+  - ends at start + payload_size - 1
+
+Parsing steps:
+
+1. Read `topic_length` (offsets 0..1).
+2. Read `topic` at bytes 16..(16 + topic_length - 1).
+3. Read `subscription_id_length` at bytes
+   (16 + topic_length)..
+   (17 + topic_length).
+4. Read `subscription_id` at bytes
+   (18 + topic_length)..
+   (18 + topic_length + subscription_id_length - 1).
+5. If `has_header=1`, read `header_size` and `header` as above.
+6. Read `payload_size` varint and then `payload`.
 
 | Field                    | Type        | Size                     | Description                                                       |
 | ------------------------ | ----------- | ------------------------ | ----------------------------------------------------------------- |
@@ -416,7 +631,8 @@ None. `remaining_length` is `0`.
 **Direction**: Both (Client ↔ Server)
 
 Response to a `PING`. MUST be sent promptly after receiving a `PING`. Failure
-to respond within a server-defined timeout may result in connection termination.
+to respond within a server-defined timeout may result in connection
+termination.
 
 #### Flags
 
@@ -456,12 +672,16 @@ terminate the connection after sending this message.
 
 All reserved (MUST be `0`).
 
-#### Variable Header
+#### Variable Header (fixed prefix shown)
 
 ```mermaid
 packet
-  15-0: "error_code (2 B, uint16 LE)"
+  0-15: "error_code (2 B, uint16 LE)"
 ```
+
+Byte-range (offsets relative to variable header start):
+
+- `error_code`: bytes 0..1 (uint16 LE)
 
 | Field        | Type        | Size    | Description                                             |
 | ------------ | ----------- | ------- | ------------------------------------------------------- |
@@ -547,14 +767,25 @@ Publishing `"Hello"` (5 bytes) to topic `"chat"` (4 bytes), no header:
     Byte 0: 0x30          command=0x3 (PUB), flags=0x0 (no header)
     Byte 1: 0x0B          remaining_length=11
 
-  Variable Header:
-    Bytes 2–3: 0x04 0x00  topic_length=4 (uint16 LE)
-    Bytes 4–7: "chat"     topic (4 bytes, UTF-8)
-    Byte  8:   0x05       payload_size=5 (varint, 1 byte)
+  Variable Header (offsets relative to variable header start):
+    Bytes 0..1: 0x04 0x00  topic_length=4 (uint16 LE)
+    Bytes 16..19: "chat"     topic (4 bytes, UTF-8)
+    Byte  20:   0x05       payload_size=5 (varint, 1 byte)
 
   Payload:
-    Bytes 9–13: "Hello"   payload (5 bytes)
+    Bytes 21..25: "Hello"   payload (5 bytes)
 
   Wire: [0x30, 0x0B, 0x04, 0x00, 0x63, 0x68, 0x61, 0x74, 0x05,
          0x48, 0x65, 0x6C, 0x6C, 0x6F]
 ```
+
+Notes on interpreting byte-range formulas:
+
+- All numeric offsets in the formulas above are relative to the start of the
+  variable header (i.e., the first byte after the fixed header).
+- When computing absolute wire offsets, add the length of the fixed header
+  (which is 1 byte for the header byte plus the length of the varint
+  `remaining_length`) to obtain absolute positions.
+- Implementations should not rely on diagram end offsets for variable-length
+  fields; instead, follow the length-prefix parsing steps provided for each
+  command to determine exact positions.
