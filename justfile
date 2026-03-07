@@ -54,13 +54,9 @@ profile:
     @echo "Running with profiler... Press Ctrl-C to stop and generate flamegraph.svg + profile.pb"
     @cargo run --features profiling
 
-# Generate TLS certificates for tests and dev
-generate_certs:
-    @echo "Generating TLS certificates..."
-    @bash crates/tests/certs/generate_certs.sh
-
 # Run server in dev mode with dev-config.yaml
 dev:
+    @cargo run -p tools --bin gen_dev_certs
     @echo "Starting server in dev mode..."
     @cargo run -p server -- --config crates/tests/configs/dev-config.yaml
 
@@ -71,5 +67,4 @@ preflight:
     @just fmt-check
     @just unused
     @just audit
-    @just generate_certs
     @just test
