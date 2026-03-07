@@ -40,16 +40,17 @@ async fn main() -> Result<()> {
     // Load config
     let config = Config::load_from_path(&args.config).unwrap_or_else(|e| panic!("{}", e));
 
-    tokio::select! {
-        res = quic::server::start(&config) => {
-            if let Err(e) = res {
-                error!("Server error: {}", e);
-            }
-        }
-        _ = tokio::signal::ctrl_c() => {
-            info!("Received Ctrl-C, shutting down…");
-        }
-    }
+    let server = quic::server::start(&config).await.unwrap_or_else(|e| {
+        error!("Failed to start server: {}", e);
+        std::process::exit(1);
+    });
+
+    info!("Server listening on {}", server.local_addr());
+
+    tokio::signal::ctrl_c().await.ok();
+    info!("Received Ctrl-C, shutting down…");
+
+    server.shutdown().await;
 
     // Stop profiler and write reports (flamegraph + pprof protobuf)
     profiler.stop_and_report();
