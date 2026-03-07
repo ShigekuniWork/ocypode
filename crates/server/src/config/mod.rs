@@ -3,12 +3,13 @@ use std::{fs, path::Path};
 use serde::Deserialize;
 
 mod quic;
-pub use quic::QuicConfig;
+pub use quic::{QuicConfig, TlsConfig};
 
 /// Top-level configuration and loader.
 #[derive(Debug, Deserialize)]
 pub struct Config {
     pub quic: QuicConfig,
+    pub tls: TlsConfig,
 }
 
 impl Config {
