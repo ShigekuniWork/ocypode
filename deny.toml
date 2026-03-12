@@ -1,0 +1,58 @@
+# Dependency graph configuration for cargo-deny.
+[graph]
+# Check all feature combinations (not just default features).
+all-features = true
+
+# Security advisory checking (e.g. known vulnerabilities, unmaintained, yanked crates).
+[advisories]
+version = 2
+
+# URLs of advisory databases to fetch.
+db-urls = ["https://github.com/rustsec/advisory-db"]
+# "workspace" = only fail for direct workspace deps
+unmaintained = "workspace"
+# Lint level for yanked crate versions.
+yanked = "deny"
+
+# License compliance checking.
+[licenses]
+version = 2
+
+# List of licenses allowed for dependencies.
+# Expanded to include commonly used permissive licenses and a few specific
+# licenses encountered in our dependency tree so cargo-deny doesn't reject them.
+allow = [
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-3-Clause",
+    "ISC",
+    "MIT",
+    "OpenSSL",
+    "Unlicense",
+    "CDDL-1.0",
+    "Unicode-3.0",
+    "Zlib"
+]
+# The confidence threshold for detecting a license from license text.
+confidence-threshold = 0.95
+
+# Crate ban/allowlist and duplicate-version settings.
+[bans]
+# The graph highlighting used when creating dotgraphs for crates.
+highlight = "all"
+# The lint level for when a crate version requirement is set to `*`.
+wildcards = "deny"
+# Path/git deps in private crates (e.g. workspace = true) do not emit wildcard errors.
+allow-wildcard-paths = true
+# The lint level for when multiple versions of the same crate is detected.
+# Set to "allow" to suppress duplicate-version warnings that are expected in our
+# dependency graph (e.g. due to toolchains or build-dependencies). This prevents
+# the preflight from failing on those warnings.
+multiple-versions = "allow"
+# The default lint level for `default` features for workspace crates.
+workspace-default-features = "allow"
+# The default lint level for `default` features for external crates.
+external-default-features = "allow"
+
+[bans.workspace-dependencies]
+include-path-dependencies = false
