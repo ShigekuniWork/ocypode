@@ -29,7 +29,7 @@ impl LoggerConfig {
     pub fn new(name: impl Into<String>) -> Self {
         Self {
             name: name.into(),
-            enable_tokio_console: true,
+            enable_tokio_console: false,
             with_thread_name: false,
             default_level: LevelFilter::INFO,
         }
