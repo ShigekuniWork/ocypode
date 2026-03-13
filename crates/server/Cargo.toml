@@ -9,3 +9,7 @@ console-subscriber = { workspace = true, features = ["env-filter"] }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 tokio = { workspace = true }
+tonic = { workspace = true }
+tonic-health = { workspace = true }
+tokio-stream  = { workspace = true }
+tokio-util = { workspace = true }
