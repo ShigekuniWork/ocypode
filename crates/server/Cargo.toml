@@ -14,5 +14,4 @@ tonic-health = { workspace = true }
 tokio-stream  = { workspace = true }
 tokio-util = { workspace = true }
 axum = { workspace = true }
-hyper = { workspace = true , features = ["server", "tcp"] }
 prometheus = { workspace = true , features = ["process"] }
