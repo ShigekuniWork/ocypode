@@ -1,14 +1,23 @@
+use std::net::SocketAddr;
+
 use tracing::level_filters::LevelFilter;
 
 /// Ocypode server configuration.
 pub struct ServerConfig {
     pub logger: LoggerConfig,
+    pub grpc: GrpcConfig,
+}
+
+impl Default for ServerConfig {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ServerConfig {
     // TODO: should load config from file.
     pub fn new() -> Self {
-        Self { logger: LoggerConfig::default() }
+        Self { logger: LoggerConfig::default(), grpc: GrpcConfig::default() }
     }
 }
 
@@ -33,5 +42,21 @@ impl LoggerConfig {
             with_thread_name: false,
             default_level: LevelFilter::INFO,
         }
+    }
+}
+
+pub struct GrpcConfig {
+    pub listen_addr: String,
+}
+
+impl Default for GrpcConfig {
+    fn default() -> Self {
+        Self { listen_addr: "[::1]:50051".to_string() }
+    }
+}
+
+impl GrpcConfig {
+    pub fn socket_addr(&self) -> SocketAddr {
+        self.listen_addr.parse().unwrap()
     }
 }
