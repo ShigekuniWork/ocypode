@@ -13,3 +13,5 @@ tonic = { workspace = true }
 tonic-health = { workspace = true }
 tokio-stream  = { workspace = true }
 tokio-util = { workspace = true }
+axum = { workspace = true }
+prometheus = { workspace = true , features = ["process"] }
