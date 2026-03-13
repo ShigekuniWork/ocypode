@@ -6,6 +6,7 @@ use tracing::level_filters::LevelFilter;
 pub struct ServerConfig {
     pub logger: LoggerConfig,
     pub grpc: GrpcConfig,
+    pub metrics: MetricsConfig,
 }
 
 impl Default for ServerConfig {
@@ -17,7 +18,11 @@ impl Default for ServerConfig {
 impl ServerConfig {
     // TODO: should load config from file.
     pub fn new() -> Self {
-        Self { logger: LoggerConfig::default(), grpc: GrpcConfig::default() }
+        Self {
+            logger: LoggerConfig::default(),
+            grpc: GrpcConfig::default(),
+            metrics: MetricsConfig::default(),
+        }
     }
 }
 
@@ -58,5 +63,26 @@ impl Default for GrpcConfig {
 impl GrpcConfig {
     pub fn socket_addr(&self) -> SocketAddr {
         self.listen_addr.parse().unwrap()
+    }
+}
+
+pub struct MetricsConfig {
+    pub metrics_level: MetricLevel,
+    pub listen_addr: String,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd)]
+pub enum MetricLevel {
+    #[default]
+    Disabled = 0,
+    Critical = 1,
+    Info = 2,
+    Debug = 3,
+}
+
+impl Default for MetricsConfig {
+    fn default() -> Self {
+        Self { metrics_level: MetricLevel::default(), listen_addr: "127.0.0.1:9090".to_string() }
     }
 }
