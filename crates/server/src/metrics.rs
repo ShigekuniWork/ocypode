@@ -1,9 +1,6 @@
 use std::sync::{LazyLock, OnceLock};
 
-use axum::Router;
-use axum::body::Body;
-use axum::response::Response;
-use axum::routing::get;
+use axum::{Router, body::Body, response::Response, routing::get};
 use prometheus::{
     Encoder, IntCounter, IntGauge, TextEncoder, register_int_counter, register_int_gauge,
 };
