@@ -15,3 +15,4 @@ tokio-stream  = { workspace = true }
 tokio-util = { workspace = true }
 axum = { workspace = true }
 prometheus = { workspace = true , features = ["process"] }
+s2n-quic = { workspace = true }
