@@ -1,5 +1,5 @@
 use tokio_util::sync::CancellationToken;
-use tracing::info;
+use tracing::{error, info};
 
 use crate::{
     config::{MetricLevel, ServerConfig},
@@ -12,6 +12,7 @@ mod config;
 mod grpc;
 mod logger;
 mod metrics;
+mod quic;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -32,6 +33,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             cancel_token.clone(),
         );
     }
+
+    // Start Ocypode Server
+    if let Err(e) = quic::start(&config.quic, cancel_token.clone()).await {
+        error!("{}", e);
+        return Err(e);
+    };
 
     info!("Server is ready");
 
