@@ -7,6 +7,8 @@ use std::{
 use tracing::level_filters::LevelFilter;
 
 const QUIC_CONNECT_TIMEOUT_MS: u64 = 2000;
+// 32 KiB
+const QUIC_READ_BUFFER_SIZE: usize = 32 * 1024;
 
 /// Ocypode server configuration.
 pub struct ServerConfig {
@@ -101,6 +103,7 @@ pub struct QuicConfig {
     pub enable_gro: bool,
     pub endpoint_limits: Option<usize>,
     pub connect_timeout: u64,
+    pub read_buffer_size: usize,
     // QUIC requires TLS to be enabled.
     pub tls: TLSConfig,
 }
@@ -113,6 +116,7 @@ impl Default for QuicConfig {
             enable_gro: true,
             endpoint_limits: None,
             connect_timeout: QUIC_CONNECT_TIMEOUT_MS,
+            read_buffer_size: QUIC_READ_BUFFER_SIZE,
             tls: TLSConfig::default(),
         }
     }

@@ -264,7 +264,11 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::io::Cursor;
+
     use prost::Message;
+    use tokio_stream::StreamExt;
+    use tokio_util::codec::FramedRead;
 
     use super::*;
 
@@ -423,5 +427,58 @@ mod tests {
             }
         }
         assert!(output_buffer.is_empty());
+    }
+
+    fn build_connect_frame(client_id: &str) -> Vec<u8> {
+        let conn = pb::Connect {
+            version: 1,
+            verbose: false,
+            client_id: client_id.to_string(),
+            credentials: None,
+        };
+        let mut codec = ClientCodec;
+        let mut buf = BytesMut::new();
+        codec.encode(conn, &mut buf).unwrap();
+        buf.to_vec()
+    }
+
+    #[tokio::test]
+    async fn framed_read_decodes_single_connect_frame() {
+        let data = build_connect_frame("cli-framed-1");
+        let cursor = Cursor::new(data);
+        let mut framed = FramedRead::with_capacity(cursor, ServerCodec, 32 * 1024);
+
+        let frame = framed.next().await.unwrap().unwrap();
+        assert!(matches!(frame, Frame::Connect(ref msg) if msg.client_id == "cli-framed-1"));
+        assert!(framed.next().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn framed_read_decodes_multiple_frames_in_sequence() {
+        let mut data = build_connect_frame("cli-framed-2a");
+        data.extend(build_connect_frame("cli-framed-2b"));
+        let cursor = Cursor::new(data);
+        let mut framed = FramedRead::with_capacity(cursor, ServerCodec, 32 * 1024);
+
+        let frame1 = framed.next().await.unwrap().unwrap();
+        assert!(matches!(frame1, Frame::Connect(ref msg) if msg.client_id == "cli-framed-2a"));
+
+        let frame2 = framed.next().await.unwrap().unwrap();
+        assert!(matches!(frame2, Frame::Connect(ref msg) if msg.client_id == "cli-framed-2b"));
+
+        assert!(framed.next().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn framed_read_recovers_from_bad_prefix_byte() {
+        let conn_data = build_connect_frame("cli-framed-3");
+        let mut data = vec![0xFF]; // invalid command byte
+        data.extend(conn_data);
+        let cursor = Cursor::new(data);
+        let mut framed = FramedRead::with_capacity(cursor, ServerCodec, 32 * 1024);
+
+        let frame = framed.next().await.unwrap().unwrap();
+        assert!(matches!(frame, Frame::Connect(ref msg) if msg.client_id == "cli-framed-3"));
+        assert!(framed.next().await.is_none());
     }
 }
