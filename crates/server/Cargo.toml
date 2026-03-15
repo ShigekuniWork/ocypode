@@ -18,6 +18,7 @@ prometheus = { workspace = true , features = ["process"] }
 s2n-quic = { workspace = true }
 prost = { workspace = true }
 bytes = { workspace = true }
+futures-util = { workspace = true }
 thiserror = { workspace = true }
 
 [build-dependencies]
