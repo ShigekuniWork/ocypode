@@ -34,6 +34,9 @@ message Info {
 
   // Maximum allowed payload size per message in bytes.
   uint32 max_payload = 5;
+
+  // Server-assigned unique identifier for this client connection.
+  uint64 client_id = 6;
 }
 
 // Connect is sent by the client after receiving the Info message.
@@ -46,10 +49,6 @@ message Connect {
   // Requests explicit acknowledgements (OK) from the server for every published message.
   // Enabling this increases network overhead but guarantees delivery tracking for strict use cases.
   bool verbose = 2;
-
-  // Client identifier used solely for server-side logging and troubleshooting.
-  // It does not affect routing or ephemeral session state.
-  string client_id = 3;
 
   // Authentication credentials.
   // The selected credential must satisfy the AuthType specified in the server's Info message.
