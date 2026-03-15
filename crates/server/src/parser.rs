@@ -95,20 +95,22 @@ pub struct ServerOutbound;
 
 impl ServerOutbound {
     /// Creates an INFO message with specified parameters
-    pub fn info(version: u32, server_id: String, server_name: String) -> pb::Info {
+    pub fn info(version: u32, client_id: u64, server_id: String, server_name: String) -> pb::Info {
         pb::Info {
             version,
             auth_type: pb::info::AuthType::NoAuth as i32,
             server_id,
             server_name,
             max_payload: MAXIMUM_PAYLOAD_BYTES as u32,
+            client_id,
         }
     }
 
     /// Creates a default INFO message
     /// TODO: Load INFO message from configuration instead of using dummy values
+    #[allow(dead_code)]
     pub fn default_info() -> pb::Info {
-        Self::info(1, "ocypode-server".to_string(), "ocypode".to_string())
+        Self::info(1, 0, "ocypode-server".to_string(), "ocypode".to_string())
     }
 }
 
@@ -119,8 +121,8 @@ pub struct ClientOutbound;
 impl ClientOutbound {
     /// Creates a CONNECT message with specified parameters
     #[allow(dead_code)]
-    pub fn connect(version: u32, client_id: String, verbose: bool) -> pb::Connect {
-        pb::Connect { version, verbose, client_id, credentials: None }
+    pub fn connect(version: u32, verbose: bool) -> pb::Connect {
+        pb::Connect { version, verbose, credentials: None }
     }
 }
 
@@ -280,6 +282,7 @@ mod tests {
             server_id: "srv-1".to_string(),
             server_name: "ocypode".to_string(),
             max_payload: 1024,
+            client_id: 0,
         };
         let mut codec = ServerCodec;
         let mut output_buffer = BytesMut::new();
@@ -301,12 +304,7 @@ mod tests {
 
     #[test]
     fn decode_conn_frame_recovers_from_bad_prefix() {
-        let conn = pb::Connect {
-            version: 1,
-            verbose: true,
-            client_id: "cli-1".to_string(),
-            credentials: None,
-        };
+        let conn = pb::Connect { version: 1, verbose: true, credentials: None };
         let payload = conn.encode_to_vec();
 
         let invalid_command_byte = 0xFF; // intentionally invalid to force resync
@@ -318,11 +316,7 @@ mod tests {
 
         let mut codec = ServerCodec;
         let decoded = codec.decode(&mut incoming_bytes).unwrap().unwrap();
-        match decoded {
-            Frame::Connect(message) => {
-                assert_eq!(message.client_id, conn.client_id);
-            }
-        }
+        assert!(matches!(decoded, Frame::Connect(_)));
         assert!(incoming_bytes.is_empty());
     }
 
@@ -334,6 +328,7 @@ mod tests {
             server_id: "srv-2".to_string(),
             server_name: "ocypode".to_string(),
             max_payload: 2048,
+            client_id: 0,
         };
         let mut server_codec = ServerCodec;
         let mut client_codec = ClientCodec;
@@ -353,12 +348,7 @@ mod tests {
 
     #[test]
     fn client_encode_connect_frame_has_header_and_payload() {
-        let conn = pb::Connect {
-            version: 1,
-            verbose: true,
-            client_id: "cli-2".to_string(),
-            credentials: None,
-        };
+        let conn = pb::Connect { version: 1, verbose: true, credentials: None };
         let mut codec = ClientCodec;
         let mut output_buffer = BytesMut::new();
 
@@ -373,7 +363,7 @@ mod tests {
         assert_eq!(payload_length, payload_bytes.len());
 
         let decoded = pb::Connect::decode(payload_bytes).unwrap();
-        assert_eq!(decoded.client_id, conn.client_id);
+        assert_eq!(decoded.version, conn.version);
     }
 
     #[test]
@@ -384,6 +374,7 @@ mod tests {
             server_id: "srv-3".to_string(),
             server_name: "ocypode".to_string(),
             max_payload: 512,
+            client_id: 0,
         };
         let payload = info.encode_to_vec();
 
@@ -412,6 +403,7 @@ mod tests {
             server_id: "srv-4".to_string(),
             server_name: "ocypode".to_string(),
             max_payload: 4096,
+            client_id: 0,
         };
         let mut client_codec = ClientCodec;
         let mut server_codec = ServerCodec;
@@ -429,13 +421,8 @@ mod tests {
         assert!(output_buffer.is_empty());
     }
 
-    fn build_connect_frame(client_id: &str) -> Vec<u8> {
-        let conn = pb::Connect {
-            version: 1,
-            verbose: false,
-            client_id: client_id.to_string(),
-            credentials: None,
-        };
+    fn build_connect_frame() -> Vec<u8> {
+        let conn = pb::Connect { version: 1, verbose: false, credentials: None };
         let mut codec = ClientCodec;
         let mut buf = BytesMut::new();
         codec.encode(conn, &mut buf).unwrap();
@@ -444,41 +431,41 @@ mod tests {
 
     #[tokio::test]
     async fn framed_read_decodes_single_connect_frame() {
-        let data = build_connect_frame("cli-framed-1");
+        let data = build_connect_frame();
         let cursor = Cursor::new(data);
         let mut framed = FramedRead::with_capacity(cursor, ServerCodec, 32 * 1024);
 
         let frame = framed.next().await.unwrap().unwrap();
-        assert!(matches!(frame, Frame::Connect(ref msg) if msg.client_id == "cli-framed-1"));
+        assert!(matches!(frame, Frame::Connect(_)));
         assert!(framed.next().await.is_none());
     }
 
     #[tokio::test]
     async fn framed_read_decodes_multiple_frames_in_sequence() {
-        let mut data = build_connect_frame("cli-framed-2a");
-        data.extend(build_connect_frame("cli-framed-2b"));
+        let mut data = build_connect_frame();
+        data.extend(build_connect_frame());
         let cursor = Cursor::new(data);
         let mut framed = FramedRead::with_capacity(cursor, ServerCodec, 32 * 1024);
 
         let frame1 = framed.next().await.unwrap().unwrap();
-        assert!(matches!(frame1, Frame::Connect(ref msg) if msg.client_id == "cli-framed-2a"));
+        assert!(matches!(frame1, Frame::Connect(_)));
 
         let frame2 = framed.next().await.unwrap().unwrap();
-        assert!(matches!(frame2, Frame::Connect(ref msg) if msg.client_id == "cli-framed-2b"));
+        assert!(matches!(frame2, Frame::Connect(_)));
 
         assert!(framed.next().await.is_none());
     }
 
     #[tokio::test]
     async fn framed_read_recovers_from_bad_prefix_byte() {
-        let conn_data = build_connect_frame("cli-framed-3");
+        let conn_data = build_connect_frame();
         let mut data = vec![0xFF]; // invalid command byte
         data.extend(conn_data);
         let cursor = Cursor::new(data);
         let mut framed = FramedRead::with_capacity(cursor, ServerCodec, 32 * 1024);
 
         let frame = framed.next().await.unwrap().unwrap();
-        assert!(matches!(frame, Frame::Connect(ref msg) if msg.client_id == "cli-framed-3"));
+        assert!(matches!(frame, Frame::Connect(_)));
         assert!(framed.next().await.is_none());
     }
 }

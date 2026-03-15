@@ -26,7 +26,7 @@ fn default_info_message() -> pb::Info {
 }
 
 fn sample_connect_message() -> pb::Connect {
-    ClientOutbound::connect(1, "client-1".to_string(), true)
+    ClientOutbound::connect(1, true)
 }
 
 async fn read_next_client_frame<ReceiveStream>(
@@ -124,6 +124,7 @@ async fn info_then_connect_over_quic() -> Result<(), TestError> {
     assert_eq!(info_message.server_id, expected_info.server_id);
     assert_eq!(info_message.server_name, expected_info.server_name);
     assert_eq!(info_message.max_payload, expected_info.max_payload);
+    assert!(info_message.client_id > 0, "server must assign a non-zero client_id");
 
     // Send CONNECT to server using ClientCodec (from parser.rs)
     let connect_message = sample_connect_message();

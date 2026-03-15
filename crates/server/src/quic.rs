@@ -1,4 +1,9 @@
-use std::{error::Error, net::SocketAddr, time::Duration};
+use std::{
+    error::Error,
+    net::SocketAddr,
+    sync::atomic::{AtomicU64, Ordering},
+    time::Duration,
+};
 
 use futures_util::SinkExt;
 use s2n_quic::{Server, provider::endpoint_limits, stream::BidirectionalStream};
@@ -15,18 +20,23 @@ use crate::{
     parser::{Frame, ServerCodec, ServerOutbound, pb},
 };
 
+static CLIENT_ID_COUNTER: AtomicU64 = AtomicU64::new(1);
+
 /// Sends INFO to the client and awaits a CONNECT response within the given timeout.
 /// INFO is also re-sent when server configuration is updated.
 async fn perform_handshake<R, W>(
     framed_read: &mut FramedRead<R, ServerCodec>,
     framed_write: &mut FramedWrite<W, ServerCodec>,
     connect_timeout: Duration,
+    client_id: u64,
 ) -> Result<pb::Connect, ServerCodecError>
 where
     R: tokio::io::AsyncRead + Unpin,
     W: tokio::io::AsyncWrite + Unpin,
 {
-    framed_write.send(ServerOutbound::default_info()).await?;
+    let info =
+        ServerOutbound::info(1, client_id, "ocypode-server".to_string(), "ocypode".to_string());
+    framed_write.send(info).await?;
 
     tokio::time::timeout(connect_timeout, async {
         match framed_read.next().await {
@@ -45,8 +55,8 @@ where
 
 fn handle_frame(frame: Frame) -> Result<(), ServerCodecError> {
     match frame {
-        Frame::Connect(msg) => {
-            info!("Received unexpected CONNECT from client_id={}", msg.client_id);
+        Frame::Connect(_) => {
+            info!("Received unexpected CONNECT after handshake");
         }
     }
     Ok(())
@@ -62,9 +72,9 @@ async fn handle_bidirectional_stream(
     let mut framed_read = FramedRead::with_capacity(receive_stream, ServerCodec, read_buffer_size);
     let mut framed_write = FramedWrite::with_capacity(send_stream, ServerCodec, write_buffer_size);
 
-    let connect_msg =
-        perform_handshake(&mut framed_read, &mut framed_write, connect_timeout).await?;
-    info!("Accepted CONNECT from client_id={}", connect_msg.client_id);
+    let client_id = CLIENT_ID_COUNTER.fetch_add(1, Ordering::Relaxed);
+    perform_handshake(&mut framed_read, &mut framed_write, connect_timeout, client_id).await?;
+    info!("Accepted CONNECT from client_id={}", client_id);
 
     while let Some(frame) = framed_read.next().await {
         handle_frame(frame?)?;
@@ -156,21 +166,19 @@ mod tests {
         let server = async {
             let mut framed_read = FramedRead::with_capacity(server_rx, ServerCodec, 4096);
             let mut framed_write = FramedWrite::with_capacity(server_tx, ServerCodec, 4096);
-            perform_handshake(&mut framed_read, &mut framed_write, Duration::from_secs(1)).await
+            perform_handshake(&mut framed_read, &mut framed_write, Duration::from_secs(1), 1).await
         };
 
         let client = async {
             let mut framed_read = FramedRead::with_capacity(client_rx, ClientCodec, 4096);
-            let _info = framed_read.next().await.unwrap().unwrap();
+            let info = framed_read.next().await.unwrap().unwrap();
+            let crate::parser::ClientFrame::Info(info_msg) = info;
+            assert_eq!(info_msg.client_id, 1);
             let mut framed_write = FramedWrite::with_capacity(client_tx, ClientCodec, 4096);
-            framed_write
-                .send(ClientOutbound::connect(1, "test-client".to_string(), false))
-                .await
-                .unwrap();
+            framed_write.send(ClientOutbound::connect(1, false)).await.unwrap();
         };
 
         let (result, _): (Result<_, ServerCodecError>, _) = tokio::join!(server, client);
-        let connect = result.unwrap();
-        assert_eq!(connect.client_id, "test-client");
+        result.unwrap();
     }
 }
