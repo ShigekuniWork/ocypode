@@ -2,3 +2,66 @@ syntax = "proto3";
 
 package ocypode.pubsub.v1;
 
+// Info contains the server's configuration and capabilities.
+// This message must be exchanged during the initial handshake before a connection is established.
+//
+// For non-gRPC transports, the message must be prefixed with a 1-byte Command type
+// and a 4-byte payload length.
+message Info {
+  // AuthType defines the authentication methods supported or required by the server.
+  enum AuthType {
+    // No authentication required.
+    NO_AUTH = 0;
+    // Username and password authentication.
+    PASSWORD = 1;
+    // Token-based authentication.
+    TOKEN = 2;
+    // Mutual TLS (mTLS) authentication.
+    MTLS = 3;
+  }
+
+  // Ocypode protocol version.
+  uint32 version = 1;
+
+  // The authentication method required by the server.
+  AuthType auth_type = 2;
+
+  // Unique identifier for the server instance.
+  string server_id = 3;
+
+  // Human-readable name of the server.
+  string server_name = 4;
+
+  // Maximum allowed payload size per message in bytes.
+  uint32 max_payload = 5;
+}
+
+// Connect is sent by the client after receiving the Info message.
+// It establishes the session parameters and provides necessary credentials.
+message Connect {
+  // Client's protocol version. 
+  // Required to detect and gracefully handle protocol mismatches between client and server early.
+  uint32 version = 1;
+
+  // Requests explicit acknowledgements (OK) from the server for every published message.
+  // Enabling this increases network overhead but guarantees delivery tracking for strict use cases.
+  bool verbose = 2;
+
+  // Client identifier used solely for server-side logging and troubleshooting.
+  // It does not affect routing or ephemeral session state.
+  string client_id = 3;
+
+  // Authentication credentials.
+  // The selected credential must satisfy the AuthType specified in the server's Info message.
+  // If the server requires NO_AUTH or MTLS, this oneof should remain unset.
+  oneof credentials {
+    PasswordAuth password = 4;
+    string token = 5;
+  }
+}
+
+// PasswordAuth represents standard username/password credentials.
+message PasswordAuth {
+  string username = 1;
+  string password = 2;
+}
