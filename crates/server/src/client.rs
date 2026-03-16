@@ -130,6 +130,8 @@ async fn perform_handshake<R: AsyncRead + Unpin>(
             Some(Ok(Frame::Connect(connect))) => {
                 pending.on_connect(connect, authenticator).map_err(ClientError::Handshake)
             }
+            // Publish/Subscribe/UnSubscribe before handshake completes is invalid.
+            Some(Ok(_)) => Err(ClientError::Handshake(HandshakeError::ConnectionClosed)),
             Some(Err(e)) => Err(ClientError::Codec(e)),
             None => Err(ClientError::Handshake(HandshakeError::ConnectionClosed)),
         }
@@ -149,14 +151,9 @@ fn dispatch_frame(
                 "client_id={} received unexpected CONNECT after handshake",
                 handshake.client_id
             );
-        } /* TODO: Frame::Publish(msg) => {
-           *     // permission_checker.check_publish(&msg.subject, handshake.client_id)?;
-           *     // router.publish(&msg.subject, msg.payload, handshake.client_id);
-           * }
-           * TODO: Frame::Subscribe(msg) => {
-           *     // permission_checker.check_subscribe(&msg.subject, handshake.client_id)?;
-           *     // router.subscribe(&msg.subject, handshake.client_id, outbound.clone());
-           * } */
+        }
+        // TODO: permission check → router dispatch
+        Frame::Publish(_) | Frame::Subscribe(_) | Frame::UnSubscribe(_) => {}
     }
     Ok(())
 }
@@ -187,6 +184,8 @@ async fn dispatch_outbound<W: AsyncWrite + Unpin>(
 ) -> Result<(), ServerCodecError> {
     match message {
         OutboundMessage::Info(info) => framed_write.feed(info).await?,
+        // TODO: Message delivery to subscribers
+        OutboundMessage::Message(_) => {}
     }
     Ok(())
 }
@@ -240,7 +239,7 @@ mod tests {
         // Act as a network client: read INFO, send CONNECT.
         let mut framed_read = FramedRead::with_capacity(client_rx, ClientCodec, 4096);
         let frame = framed_read.next().await.unwrap().unwrap();
-        let ClientFrame::Info(info_msg) = frame;
+        let ClientFrame::Info(info_msg) = frame else { panic!("expected Info frame") };
         assert_eq!(info_msg.client_id, 1);
 
         let mut framed_write = FramedWrite::with_capacity(client_tx, ClientCodec, 4096);

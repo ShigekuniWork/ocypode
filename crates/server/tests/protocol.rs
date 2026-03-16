@@ -107,6 +107,12 @@ async fn info_then_connect_over_quic() -> Result<(), TestError> {
     let info_message =
         match read_next_client_frame(&mut receive_stream, &mut incoming_bytes).await? {
             Some(ClientFrame::Info(message)) => message,
+            Some(_) => {
+                return Err(Box::from(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "expected INFO, got unexpected frame",
+                )));
+            }
             None => {
                 return Err(Box::from(std::io::Error::new(
                     std::io::ErrorKind::UnexpectedEof,
@@ -157,6 +163,12 @@ async fn connect_timeout_when_no_connect_message() -> Result<(), TestError> {
     let _info_message =
         match read_next_client_frame(&mut receive_stream, &mut incoming_bytes).await? {
             Some(ClientFrame::Info(message)) => message,
+            Some(_) => {
+                return Err(Box::from(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "expected INFO, got unexpected frame",
+                )));
+            }
             None => {
                 return Err(Box::from(std::io::Error::new(
                     std::io::ErrorKind::UnexpectedEof,
