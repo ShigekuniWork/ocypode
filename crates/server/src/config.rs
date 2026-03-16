@@ -135,6 +135,8 @@ impl QuicConfig {
 pub struct TLSConfig {
     pub cert_file_path: String,
     pub key_file_path: String,
+    /// When true, the server requires all clients to present a TLS certificate (mTLS).
+    pub client_verify: bool,
 }
 
 impl Default for TLSConfig {
@@ -143,6 +145,7 @@ impl Default for TLSConfig {
         TLSConfig {
             cert_file_path: "crates/certs/server.crt".to_string(),
             key_file_path: "crates/certs/key.pem".to_string(),
+            client_verify: false,
         }
     }
 }

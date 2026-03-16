@@ -34,8 +34,14 @@ where
     R: tokio::io::AsyncRead + Unpin,
     W: tokio::io::AsyncWrite + Unpin,
 {
-    let info =
-        ServerOutbound::info(1, client_id, "ocypode-server".to_string(), "ocypode".to_string());
+    let info = ServerOutbound::info(
+        1,
+        client_id,
+        "ocypode-server".to_string(),
+        "ocypode".to_string(),
+        false,
+        false,
+    );
     framed_write.send(info).await?;
 
     tokio::time::timeout(connect_timeout, async {
@@ -101,8 +107,17 @@ pub async fn start(
         endpoint_limits::Default::default()
     };
 
+    let tls = {
+        let tls_builder = s2n_quic::provider::tls::default::Server::builder()
+            .with_certificate(config.tls.cert_file_path()?, config.tls.key_file_path()?)?;
+        if config.tls.client_verify {
+            tls_builder.with_client_authentication()?.build()?
+        } else {
+            tls_builder.build()?
+        }
+    };
     let mut server = Server::builder()
-        .with_tls((config.tls.cert_file_path()?, config.tls.key_file_path()?))?
+        .with_tls(tls)?
         .with_io(io)?
         .with_endpoint_limits(endpoint_limits_config)?
         .start()?;
