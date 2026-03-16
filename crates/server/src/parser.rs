@@ -95,14 +95,22 @@ pub struct ServerOutbound;
 
 impl ServerOutbound {
     /// Creates an INFO message with specified parameters
-    pub fn info(version: u32, client_id: u64, server_id: String, server_name: String) -> pb::Info {
+    pub fn info(
+        version: u32,
+        client_id: u64,
+        server_id: String,
+        server_name: String,
+        requires_auth: bool,
+        tls_verify: bool,
+    ) -> pb::Info {
         pb::Info {
             version,
-            auth_type: pb::info::AuthType::NoAuth as i32,
             server_id,
             server_name,
             max_payload: MAXIMUM_PAYLOAD_BYTES as u32,
             client_id,
+            requires_auth,
+            tls_verify,
         }
     }
 
@@ -110,7 +118,7 @@ impl ServerOutbound {
     /// TODO: Load INFO message from configuration instead of using dummy values
     #[allow(dead_code)]
     pub fn default_info() -> pb::Info {
-        Self::info(1, 0, "ocypode-server".to_string(), "ocypode".to_string())
+        Self::info(1, 0, "ocypode-server".to_string(), "ocypode".to_string(), false, false)
     }
 }
 
@@ -122,7 +130,31 @@ impl ClientOutbound {
     /// Creates a CONNECT message with specified parameters
     #[allow(dead_code)]
     pub fn connect(version: u32, verbose: bool) -> pb::Connect {
-        pb::Connect { version, verbose, credentials: None }
+        pb::Connect {
+            version,
+            verbose,
+            auth_method: pb::AuthMethod::NoAuth as i32,
+            credentials: None,
+        }
+    }
+
+    /// Creates a CONNECT message with password credentials
+    #[allow(dead_code)]
+    pub fn connect_with_password(
+        version: u32,
+        verbose: bool,
+        username: String,
+        password: String,
+    ) -> pb::Connect {
+        pb::Connect {
+            version,
+            verbose,
+            auth_method: pb::AuthMethod::Password as i32,
+            credentials: Some(pb::connect::Credentials::PasswordAuth(pb::PasswordAuth {
+                username,
+                password,
+            })),
+        }
     }
 }
 
@@ -278,11 +310,12 @@ mod tests {
     fn encode_info_frame_has_header_and_payload() {
         let info = pb::Info {
             version: 1,
-            auth_type: pb::info::AuthType::NoAuth as i32,
             server_id: "srv-1".to_string(),
             server_name: "ocypode".to_string(),
             max_payload: 1024,
             client_id: 0,
+            requires_auth: false,
+            tls_verify: false,
         };
         let mut codec = ServerCodec;
         let mut output_buffer = BytesMut::new();
@@ -304,7 +337,12 @@ mod tests {
 
     #[test]
     fn decode_conn_frame_recovers_from_bad_prefix() {
-        let conn = pb::Connect { version: 1, verbose: true, credentials: None };
+        let conn = pb::Connect {
+            version: 1,
+            verbose: true,
+            auth_method: pb::AuthMethod::NoAuth as i32,
+            credentials: None,
+        };
         let payload = conn.encode_to_vec();
 
         let invalid_command_byte = 0xFF; // intentionally invalid to force resync
@@ -324,11 +362,12 @@ mod tests {
     fn encode_and_decode_info_frame() {
         let info = pb::Info {
             version: 1,
-            auth_type: pb::info::AuthType::NoAuth as i32,
             server_id: "srv-2".to_string(),
             server_name: "ocypode".to_string(),
             max_payload: 2048,
             client_id: 0,
+            requires_auth: false,
+            tls_verify: false,
         };
         let mut server_codec = ServerCodec;
         let mut client_codec = ClientCodec;
@@ -348,7 +387,12 @@ mod tests {
 
     #[test]
     fn client_encode_connect_frame_has_header_and_payload() {
-        let conn = pb::Connect { version: 1, verbose: true, credentials: None };
+        let conn = pb::Connect {
+            version: 1,
+            verbose: true,
+            auth_method: pb::AuthMethod::NoAuth as i32,
+            credentials: None,
+        };
         let mut codec = ClientCodec;
         let mut output_buffer = BytesMut::new();
 
@@ -370,11 +414,12 @@ mod tests {
     fn client_decode_info_frame_recovers_from_bad_prefix() {
         let info = pb::Info {
             version: 1,
-            auth_type: pb::info::AuthType::NoAuth as i32,
             server_id: "srv-3".to_string(),
             server_name: "ocypode".to_string(),
             max_payload: 512,
             client_id: 0,
+            requires_auth: false,
+            tls_verify: false,
         };
         let payload = info.encode_to_vec();
 
@@ -399,11 +444,12 @@ mod tests {
     fn client_encode_and_decode_info_frame() {
         let info = pb::Info {
             version: 2,
-            auth_type: pb::info::AuthType::NoAuth as i32,
             server_id: "srv-4".to_string(),
             server_name: "ocypode".to_string(),
             max_payload: 4096,
             client_id: 0,
+            requires_auth: false,
+            tls_verify: false,
         };
         let mut client_codec = ClientCodec;
         let mut server_codec = ServerCodec;
@@ -422,7 +468,12 @@ mod tests {
     }
 
     fn build_connect_frame() -> Vec<u8> {
-        let conn = pb::Connect { version: 1, verbose: false, credentials: None };
+        let conn = pb::Connect {
+            version: 1,
+            verbose: false,
+            auth_method: pb::AuthMethod::NoAuth as i32,
+            credentials: None,
+        };
         let mut codec = ClientCodec;
         let mut buf = BytesMut::new();
         codec.encode(conn, &mut buf).unwrap();

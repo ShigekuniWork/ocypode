@@ -120,7 +120,8 @@ async fn info_then_connect_over_quic() -> Result<(), TestError> {
     // Verify INFO message content
     let expected_info = default_info_message();
     assert_eq!(info_message.version, expected_info.version);
-    assert_eq!(info_message.auth_type, expected_info.auth_type);
+    assert_eq!(info_message.requires_auth, expected_info.requires_auth);
+    assert_eq!(info_message.tls_verify, expected_info.tls_verify);
     assert_eq!(info_message.server_id, expected_info.server_id);
     assert_eq!(info_message.server_name, expected_info.server_name);
     assert_eq!(info_message.max_payload, expected_info.max_payload);

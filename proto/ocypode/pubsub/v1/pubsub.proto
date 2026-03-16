@@ -2,29 +2,24 @@ syntax = "proto3";
 
 package ocypode.pubsub.v1;
 
+// AuthMethod defines the application-level authentication methods.
+enum AuthMethod {
+  // No authentication required.
+  NO_AUTH = 0;
+  // Username and password authentication.
+  PASSWORD = 1;
+}
+
 // Info contains the server's configuration and capabilities.
 // This message must be exchanged during the initial handshake before a connection is established.
 //
 // For non-gRPC transports, the message must be prefixed with a 1-byte Command type
 // and a 4-byte payload length.
 message Info {
-  // AuthType defines the authentication methods supported or required by the server.
-  enum AuthType {
-    // No authentication required.
-    NO_AUTH = 0;
-    // Username and password authentication.
-    PASSWORD = 1;
-    // Token-based authentication.
-    TOKEN = 2;
-    // Mutual TLS (mTLS) authentication.
-    MTLS = 3;
-  }
-
   // Ocypode protocol version.
   uint32 version = 1;
 
-  // The authentication method required by the server.
-  AuthType auth_type = 2;
+  reserved 2; reserved "auth_type";
 
   // Unique identifier for the server instance.
   string server_id = 3;
@@ -37,12 +32,18 @@ message Info {
 
   // Server-assigned unique identifier for this client connection.
   uint64 client_id = 6;
+
+  // True when the server requires application-level authentication.
+  bool requires_auth = 7;
+
+  // True when the server requires client TLS certificates (mTLS).
+  bool tls_verify = 8;
 }
 
 // Connect is sent by the client after receiving the Info message.
 // It establishes the session parameters and provides necessary credentials.
 message Connect {
-  // Client's protocol version. 
+  // Client's protocol version.
   // Required to detect and gracefully handle protocol mismatches between client and server early.
   uint32 version = 1;
 
@@ -50,12 +51,14 @@ message Connect {
   // Enabling this increases network overhead but guarantees delivery tracking for strict use cases.
   bool verbose = 2;
 
-  // Authentication credentials.
-  // The selected credential must satisfy the AuthType specified in the server's Info message.
-  // If the server requires NO_AUTH or MTLS, this oneof should remain unset.
+  reserved 4, 5; reserved "password", "token";
+
+  // The authentication method the client wishes to use.
+  AuthMethod auth_method = 6;
+
+  // Authentication credentials matching the selected auth_method.
   oneof credentials {
-    PasswordAuth password = 4;
-    string token = 5;
+    PasswordAuth password_auth = 7;
   }
 }
 
