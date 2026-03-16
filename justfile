@@ -7,8 +7,8 @@ fmt:
 
 # Lint Rust Code
 lint:
-    cargo clippy
+    cargo clippy --all-targets --all-features -- -D warnings
 
 # Fix lint Rust Code
 lint-fix:
-    cargo clippy --fix --allow-dirty
+    cargo clippy --all-targets --all-features --fix --allow-dirty
