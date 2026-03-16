@@ -2,13 +2,17 @@
 //       FramedRead → Handshake → Frame dispatch → Permission check → Router → FramedWrite.
 //       Permission check (permission.rs) and routing (router.rs) are stubs pending implementation.
 
-use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{
+    Arc,
+    atomic::{AtomicU64, Ordering},
+};
 
 use futures_util::SinkExt;
 use thiserror::Error;
-use tokio::io::{AsyncRead, AsyncWrite};
-use tokio::sync::mpsc;
+use tokio::{
+    io::{AsyncRead, AsyncWrite},
+    sync::mpsc,
+};
 use tokio_stream::StreamExt;
 use tokio_util::codec::{FramedRead, FramedWrite};
 
@@ -116,6 +120,7 @@ async fn perform_handshake<R: AsyncRead + Unpin>(
     info: pb::Info,
 ) -> Result<CompletedHandshake, ClientError> {
     use std::time::Duration;
+
     use tokio::time::timeout;
 
     outbound.send(OutboundMessage::Info(info)).await?;
@@ -144,15 +149,14 @@ fn dispatch_frame(
                 "client_id={} received unexpected CONNECT after handshake",
                 handshake.client_id
             );
-        }
-        // TODO: Frame::Publish(msg) => {
-        //     // permission_checker.check_publish(&msg.subject, handshake.client_id)?;
-        //     // router.publish(&msg.subject, msg.payload, handshake.client_id);
-        // }
-        // TODO: Frame::Subscribe(msg) => {
-        //     // permission_checker.check_subscribe(&msg.subject, handshake.client_id)?;
-        //     // router.subscribe(&msg.subject, handshake.client_id, outbound.clone());
-        // }
+        } /* TODO: Frame::Publish(msg) => {
+           *     // permission_checker.check_publish(&msg.subject, handshake.client_id)?;
+           *     // router.publish(&msg.subject, msg.payload, handshake.client_id);
+           * }
+           * TODO: Frame::Subscribe(msg) => {
+           *     // permission_checker.check_subscribe(&msg.subject, handshake.client_id)?;
+           *     // router.subscribe(&msg.subject, handshake.client_id, outbound.clone());
+           * } */
     }
     Ok(())
 }
@@ -229,11 +233,8 @@ mod tests {
         let (client_rx, client_tx) = tokio::io::split(client_io);
 
         let transport = DuplexTransport { reader: server_rx, writer: server_tx };
-        let client = Client::new(
-            transport,
-            Arc::new(NoAuthAuthenticator),
-            Arc::new(ServerConfig::new()),
-        );
+        let client =
+            Client::new(transport, Arc::new(NoAuthAuthenticator), Arc::new(ServerConfig::new()));
         let server = tokio::spawn(client.run());
 
         // Act as a network client: read INFO, send CONNECT.

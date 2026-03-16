@@ -48,10 +48,9 @@ impl PendingHandshake {
         authenticator: &dyn Authenticator,
     ) -> Result<CompletedHandshake, HandshakeError> {
         match authenticator.authenticate(&connect) {
-            AuthOutcome::Accepted => Ok(CompletedHandshake {
-                client_id: self.client_id,
-                connect_info: connect,
-            }),
+            AuthOutcome::Accepted => {
+                Ok(CompletedHandshake { client_id: self.client_id, connect_info: connect })
+            }
             AuthOutcome::Rejected { reason } => {
                 Err(HandshakeError::AuthenticationFailed { reason })
             }

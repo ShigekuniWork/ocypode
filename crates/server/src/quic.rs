@@ -1,8 +1,4 @@
-use std::{
-    error::Error,
-    net::SocketAddr,
-    sync::Arc,
-};
+use std::{error::Error, net::SocketAddr, sync::Arc};
 
 use s2n_quic::{Server, provider::endpoint_limits, stream::BidirectionalStream};
 use tokio_util::sync::CancellationToken;
