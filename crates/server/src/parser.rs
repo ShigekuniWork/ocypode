@@ -103,10 +103,18 @@ impl TryFrom<u8> for ServerInboundCommand {
 
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         match value {
-            _ if value == <pb::Connect as CommandCodec>::COMMAND => Ok(ServerInboundCommand::Connect),
-            _ if value == <pb::Publish as CommandCodec>::COMMAND => Ok(ServerInboundCommand::Publish),
-            _ if value == <pb::Subscribe as CommandCodec>::COMMAND => Ok(ServerInboundCommand::Subscribe),
-            _ if value == <pb::UnSubscribe as CommandCodec>::COMMAND => Ok(ServerInboundCommand::UnSubscribe),
+            _ if value == <pb::Connect as CommandCodec>::COMMAND => {
+                Ok(ServerInboundCommand::Connect)
+            }
+            _ if value == <pb::Publish as CommandCodec>::COMMAND => {
+                Ok(ServerInboundCommand::Publish)
+            }
+            _ if value == <pb::Subscribe as CommandCodec>::COMMAND => {
+                Ok(ServerInboundCommand::Subscribe)
+            }
+            _ if value == <pb::UnSubscribe as CommandCodec>::COMMAND => {
+                Ok(ServerInboundCommand::UnSubscribe)
+            }
             _ => Err(()),
         }
     }
@@ -125,7 +133,9 @@ impl TryFrom<u8> for ClientInboundCommand {
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         match value {
             _ if value == <pb::Info as CommandCodec>::COMMAND => Ok(ClientInboundCommand::Info),
-            _ if value == <pb::Message as CommandCodec>::COMMAND => Ok(ClientInboundCommand::Message),
+            _ if value == <pb::Message as CommandCodec>::COMMAND => {
+                Ok(ClientInboundCommand::Message)
+            }
             _ => Err(()),
         }
     }
@@ -665,7 +675,7 @@ mod tests {
         let mut server_codec = ServerCodec;
         let mut output_buffer = BytesMut::new();
 
-        server_codec.encode(unsubscribe.clone(), &mut output_buffer).unwrap();
+        server_codec.encode(unsubscribe, &mut output_buffer).unwrap();
 
         let decoded = server_codec.decode(&mut output_buffer).unwrap().unwrap();
         let Frame::UnSubscribe(message) = decoded else { panic!("expected UnSubscribe frame") };
@@ -725,11 +735,8 @@ mod tests {
 
     #[tokio::test]
     async fn framed_read_decodes_publish_subscribe_unsubscribe_sequence() {
-        let publish = pb::Publish {
-            topic: b"a/b".to_vec(),
-            payload: b"payload".to_vec(),
-            header: vec![],
-        };
+        let publish =
+            pb::Publish { topic: b"a/b".to_vec(), payload: b"payload".to_vec(), header: vec![] };
         let subscribe = pb::Subscribe {
             topic: b"a/#".to_vec(),
             subscription_id: 1,
