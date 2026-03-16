@@ -6,11 +6,17 @@ use std::{
 
 use tracing::level_filters::LevelFilter;
 
+// ── ServerConfig global defaults ─────────────────────────────────────────────
+const SERVER_ID: &str = "ocypode-server";
+const SERVER_NAME: &str = "ocypode";
+
+// ── QuicConfig defaults ───────────────────────────────────────────────────────
 const QUIC_CONNECT_TIMEOUT_MS: u64 = 2000;
 // 32 KiB
 const QUIC_READ_BUFFER_SIZE: usize = 32 * 1024;
 // 10 MiB
 const QUIC_WRITE_BUFFER_SIZE: usize = 10 * 1024 * 1024;
+const QUIC_OUTBOUND_CHANNEL_CAPACITY: usize = 1024;
 
 /// Ocypode server configuration.
 pub struct ServerConfig {
@@ -18,6 +24,15 @@ pub struct ServerConfig {
     pub grpc: GrpcConfig,
     pub metrics: MetricsConfig,
     pub quic: QuicConfig,
+    /// Unique identifier for this server instance, advertised in the INFO message.
+    pub server_id: String,
+    /// Human-readable server name, advertised in the INFO message.
+    pub server_name: String,
+    /// When true, the server advertises to clients that application-level authentication is required.
+    pub requires_auth: bool,
+    /// When true, the server requires clients to present a TLS certificate (mTLS).
+    /// This setting is also reflected in the INFO message sent to clients.
+    pub tls_verify: bool,
 }
 
 impl Default for ServerConfig {
@@ -34,6 +49,10 @@ impl ServerConfig {
             grpc: GrpcConfig::default(),
             metrics: MetricsConfig::default(),
             quic: QuicConfig::default(),
+            server_id: SERVER_ID.to_string(),
+            server_name: SERVER_NAME.to_string(),
+            requires_auth: false,
+            tls_verify: false,
         }
     }
 }
@@ -107,6 +126,9 @@ pub struct QuicConfig {
     pub connect_timeout: u64,
     pub read_buffer_size: usize,
     pub write_buffer_size: usize,
+    /// Capacity of the per-client outbound mpsc channel.
+    /// Higher values allow more messages to be queued before the writer task applies backpressure.
+    pub outbound_channel_capacity: usize,
     // QUIC requires TLS to be enabled.
     pub tls: TLSConfig,
 }
@@ -121,6 +143,7 @@ impl Default for QuicConfig {
             connect_timeout: QUIC_CONNECT_TIMEOUT_MS,
             read_buffer_size: QUIC_READ_BUFFER_SIZE,
             write_buffer_size: QUIC_WRITE_BUFFER_SIZE,
+            outbound_channel_capacity: QUIC_OUTBOUND_CHANNEL_CAPACITY,
             tls: TLSConfig::default(),
         }
     }
@@ -135,8 +158,6 @@ impl QuicConfig {
 pub struct TLSConfig {
     pub cert_file_path: String,
     pub key_file_path: String,
-    /// When true, the server requires all clients to present a TLS certificate (mTLS).
-    pub client_verify: bool,
 }
 
 impl Default for TLSConfig {
@@ -145,7 +166,6 @@ impl Default for TLSConfig {
         TLSConfig {
             cert_file_path: "crates/certs/server.crt".to_string(),
             key_file_path: "crates/certs/key.pem".to_string(),
-            client_verify: false,
         }
     }
 }

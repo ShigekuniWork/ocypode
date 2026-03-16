@@ -12,6 +12,8 @@ const PAYLOAD_LENGTH_BYTES: usize = 4;
 const HEADER_LENGTH: usize = COMMAND_BYTE_LEN + PAYLOAD_LENGTH_BYTES;
 // Maximum payload is 1MiB.
 pub const MAXIMUM_PAYLOAD_BYTES: usize = 1024 * 1024;
+/// Current Ocypode protocol version.
+pub const PROTOCOL_VERSION: u32 = 1;
 
 /// Command classify Ocypode protocol.
 #[repr(u8)]
@@ -53,6 +55,13 @@ pub enum Frame {
 #[derive(Debug, Clone, PartialEq)]
 pub enum ClientFrame {
     Info(pb::Info),
+}
+
+/// Messages the server sends to a connected client.
+/// Used as the element type for the outbound write-buffer channel.
+pub enum OutboundMessage {
+    Info(pb::Info),
+    // TODO: Publish(pb::Publish), Pong, Error(pb::Error), etc.
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

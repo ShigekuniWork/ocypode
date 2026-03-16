@@ -3,7 +3,7 @@ use std::{net::UdpSocket, path::Path, sync::Arc, time::Duration};
 use bytes::BytesMut;
 use s2n_quic::{Client, client::Connect};
 use server::{
-    config::QuicConfig,
+    config::ServerConfig,
     error::ClientCodecError,
     parser::{ClientCodec, ClientFrame, ClientOutbound, CommandCodec, ServerOutbound, pb},
 };
@@ -66,23 +66,21 @@ where
 
 async fn setup_server_and_client(
     connect_timeout: u64,
-) -> Result<(Arc<QuicConfig>, CancellationToken, s2n_quic::Client, std::net::SocketAddr), TestError>
+) -> Result<(Arc<ServerConfig>, CancellationToken, s2n_quic::Client, std::net::SocketAddr), TestError>
 {
-    let mut quic_config = QuicConfig {
-        enable_gso: false,
-        enable_gro: false,
-        listen_addr: "127.0.0.1:0".to_string(),
-        connect_timeout,
-        ..Default::default()
-    };
-    quic_config.tls.cert_file_path = "../certs/server.crt".to_string();
-    quic_config.tls.key_file_path = "../certs/key.pem".to_string();
+    let mut server_config = ServerConfig::new();
+    server_config.quic.enable_gso = false;
+    server_config.quic.enable_gro = false;
+    server_config.quic.listen_addr = "127.0.0.1:0".to_string();
+    server_config.quic.connect_timeout = connect_timeout;
+    server_config.quic.tls.cert_file_path = "../certs/server.crt".to_string();
+    server_config.quic.tls.key_file_path = "../certs/key.pem".to_string();
 
     let cancellation_token = CancellationToken::new();
-    let server_config = Arc::new(quic_config);
+    let server_config = Arc::new(server_config);
     let server_shutdown = cancellation_token.clone();
 
-    let server_address = server::quic::start(&server_config, server_shutdown).await?;
+    let server_address = server::quic::start(Arc::clone(&server_config), server_shutdown).await?;
 
     let client = Client::builder()
         .with_tls(Path::new("../certs/server.crt"))?

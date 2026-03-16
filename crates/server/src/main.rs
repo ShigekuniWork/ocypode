@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use tokio_util::sync::CancellationToken;
 use tracing::info;
 
@@ -8,17 +10,23 @@ use crate::{
     metrics::MetricsManager,
 };
 
+mod auth;
+mod client;
 mod config;
 mod error;
 mod grpc;
+mod handshake;
 mod logger;
 mod metrics;
 mod parser;
+mod permission;
 mod quic;
+mod router;
+mod transport;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let config = ServerConfig::new();
+    let config = Arc::new(ServerConfig::new());
     init_ocypode_logger(&config.logger);
 
     info!("Starting ocypode-server");
@@ -37,7 +45,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     }
 
     // Start Ocypode Server
-    let quic_addr = quic::start(&config.quic, cancel_token.clone()).await?;
+    let quic_addr = quic::start(Arc::clone(&config), cancel_token.clone()).await?;
     info!("QUIC server listening on {}", quic_addr);
 
     info!("Server is ready");
