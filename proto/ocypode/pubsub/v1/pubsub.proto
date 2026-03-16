@@ -67,3 +67,67 @@ message PasswordAuth {
   string username = 1;
   string password = 2;
 }
+
+// Publish sends a message to the specified topic.
+// Brokers route this to all matching subscribers without inspecting the payload or header.
+message Publish {
+    // Topic to publish to, encoded as UTF-8 bytes.
+    // Default maximum length is 256 bytes, up to 8 hierarchy levels separated by '/'.
+    // Must not start or end with '/'. Case-sensitive. Spaces and special characters
+    // (e.g., '@', '%') are not allowed. Topics prefixed with '$SYS' are reserved for
+    // system metadata.
+    bytes topic = 1;
+
+    // Arbitrary application payload. The broker does not parse this field.
+    // Maximum size (including header) defaults to 1 MiB; the actual limit is
+    // communicated to the client in the Info message.
+    bytes payload = 2;
+
+    // Optional metadata attached to the message. The broker does not parse this field.
+    // Its size counts toward the max_payload limit.
+    bytes header = 3;
+}
+
+// Subscribe registers interest in a topic.
+// The broker will deliver matching messages to this client using the assigned subscription_id.
+message Subscribe {
+    // Topic filter to subscribe to, encoded as UTF-8 bytes.
+    // Supports wildcard matching: '+' matches exactly one hierarchy level,
+    // '#' matches one or more remaining levels and may only appear as the last segment.
+    // Topic rules (max length, hierarchy depth, character restrictions) apply as in Publish.
+    bytes topic = 1;
+
+    // Client-assigned identifier, unique per subscription within this connection.
+    // All subsequent Message deliveries and UnSubscribe requests for this subscription
+    // reference this ID.
+    uint32 subscription_id = 2;
+
+    // Optional queue group name for load-balanced delivery.
+    // When multiple subscribers share the same queue_group name, the broker delivers
+    // each message to exactly one member of the group in round-robin order.
+    // Groups are scoped per tenant; identical names in different tenants are independent.
+    string queue_group = 3;
+}
+
+// UnSubscribe cancels an active subscription identified by subscription_id.
+// After this message is processed, the broker will stop delivering messages for
+// that subscription to this client.
+message UnSubscribe {
+    // Identifier of the subscription to cancel, as assigned by the client in Subscribe.
+    uint32 subscription_id = 2;
+}
+
+// Message is delivered by the broker to a subscriber when a matching Publish is received.
+message Message {
+    // Topic the original message was published to, encoded as UTF-8 bytes.
+    bytes topic = 1;
+
+    // Subscription identifier that matched this delivery, as assigned by the client in Subscribe.
+    uint32 subscription_id = 2;
+
+    // Application payload forwarded from the original Publish. The broker does not parse this field.
+    bytes payload = 3;
+
+    // Metadata forwarded from the original Publish. The broker does not parse this field.
+    bytes header = 4;
+}
