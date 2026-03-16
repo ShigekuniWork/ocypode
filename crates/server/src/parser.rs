@@ -20,6 +20,10 @@ pub const PROTOCOL_VERSION: u32 = 1;
 pub enum Command {
     Info = 0x00,
     Connect = 0x01,
+    Publish = 0x02,
+    Subscribe = 0x03,
+    UnSubscribe = 0x04,
+    Message = 0x05,
     // TODO: add Err command.
 }
 
@@ -46,37 +50,72 @@ impl CommandCodec for pb::Connect {
     const COMMAND: u8 = Command::Connect as u8;
 }
 
+impl CommandCodec for pb::Publish {
+    const COMMAND: u8 = Command::Publish as u8;
+}
+
+impl CommandCodec for pb::Subscribe {
+    const COMMAND: u8 = Command::Subscribe as u8;
+}
+
+impl CommandCodec for pb::UnSubscribe {
+    const COMMAND: u8 = Command::UnSubscribe as u8;
+}
+
+impl CommandCodec for pb::Message {
+    const COMMAND: u8 = Command::Message as u8;
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Frame {
     Connect(pb::Connect),
+    Publish(pb::Publish),
+    Subscribe(pb::Subscribe),
+    UnSubscribe(pb::UnSubscribe),
 }
 
 #[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum ClientFrame {
     Info(pb::Info),
+    Message(pb::Message),
 }
 
 /// Messages the server sends to a connected client.
 /// Used as the element type for the outbound write-buffer channel.
+#[allow(dead_code)]
 pub enum OutboundMessage {
     Info(pb::Info),
-    // TODO: Publish(pb::Publish), Pong, Error(pb::Error), etc.
+    Message(pb::Message),
+    // TODO: Pong, Error(pb::Error), etc.
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ServerInboundCommand {
     Connect,
+    Publish,
+    Subscribe,
+    UnSubscribe,
 }
 
 impl TryFrom<u8> for ServerInboundCommand {
     type Error = ();
 
     fn try_from(value: u8) -> Result<Self, Self::Error> {
-        if value == <pb::Connect as CommandCodec>::COMMAND {
-            Ok(ServerInboundCommand::Connect)
-        } else {
-            Err(())
+        match value {
+            _ if value == <pb::Connect as CommandCodec>::COMMAND => {
+                Ok(ServerInboundCommand::Connect)
+            }
+            _ if value == <pb::Publish as CommandCodec>::COMMAND => {
+                Ok(ServerInboundCommand::Publish)
+            }
+            _ if value == <pb::Subscribe as CommandCodec>::COMMAND => {
+                Ok(ServerInboundCommand::Subscribe)
+            }
+            _ if value == <pb::UnSubscribe as CommandCodec>::COMMAND => {
+                Ok(ServerInboundCommand::UnSubscribe)
+            }
+            _ => Err(()),
         }
     }
 }
@@ -85,16 +124,19 @@ impl TryFrom<u8> for ServerInboundCommand {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ClientInboundCommand {
     Info,
+    Message,
 }
 
 impl TryFrom<u8> for ClientInboundCommand {
     type Error = ();
 
     fn try_from(value: u8) -> Result<Self, Self::Error> {
-        if value == <pb::Info as CommandCodec>::COMMAND {
-            Ok(ClientInboundCommand::Info)
-        } else {
-            Err(())
+        match value {
+            _ if value == <pb::Info as CommandCodec>::COMMAND => Ok(ClientInboundCommand::Info),
+            _ if value == <pb::Message as CommandCodec>::COMMAND => {
+                Ok(ClientInboundCommand::Message)
+            }
+            _ => Err(()),
         }
     }
 }
@@ -216,6 +258,15 @@ impl Decoder for ServerCodec {
                 ServerInboundCommand::Connect => {
                     Frame::Connect(pb::Connect::decode_payload(&payload_bytes)?)
                 }
+                ServerInboundCommand::Publish => {
+                    Frame::Publish(pb::Publish::decode_payload(&payload_bytes)?)
+                }
+                ServerInboundCommand::Subscribe => {
+                    Frame::Subscribe(pb::Subscribe::decode_payload(&payload_bytes)?)
+                }
+                ServerInboundCommand::UnSubscribe => {
+                    Frame::UnSubscribe(pb::UnSubscribe::decode_payload(&payload_bytes)?)
+                }
             };
             return Ok(Some(frame));
         }
@@ -279,6 +330,9 @@ impl Decoder for ClientCodec {
             let frame = match command {
                 ClientInboundCommand::Info => {
                     ClientFrame::Info(pb::Info::decode_payload(&payload_bytes)?)
+                }
+                ClientInboundCommand::Message => {
+                    ClientFrame::Message(pb::Message::decode_payload(&payload_bytes)?)
                 }
             };
             return Ok(Some(frame));
@@ -390,6 +444,7 @@ mod tests {
                 assert_eq!(message.server_id, info.server_id);
                 assert_eq!(message.max_payload, info.max_payload);
             }
+            ClientFrame::Message(_) => panic!("unexpected Message frame"),
         }
         assert!(output_buffer.is_empty());
     }
@@ -445,6 +500,7 @@ mod tests {
             ClientFrame::Info(message) => {
                 assert_eq!(message.server_id, info.server_id);
             }
+            ClientFrame::Message(_) => panic!("unexpected Message frame"),
         }
         assert!(incoming_bytes.is_empty());
     }
@@ -472,6 +528,7 @@ mod tests {
                 assert_eq!(message.server_id, info.server_id);
                 assert_eq!(message.max_payload, info.max_payload);
             }
+            ClientFrame::Message(_) => panic!("unexpected Message frame"),
         }
         assert!(output_buffer.is_empty());
     }
@@ -526,6 +583,179 @@ mod tests {
 
         let frame = framed.next().await.unwrap().unwrap();
         assert!(matches!(frame, Frame::Connect(_)));
+        assert!(framed.next().await.is_none());
+    }
+
+    // --- Publish ---
+
+    #[test]
+    fn encode_and_decode_publish_frame() {
+        let publish = pb::Publish {
+            topic: b"sensors/temperature".to_vec(),
+            payload: b"42.5".to_vec(),
+            header: b"content-type:text/plain".to_vec(),
+        };
+        let mut server_codec = ServerCodec;
+        let mut output_buffer = BytesMut::new();
+
+        server_codec.encode(publish.clone(), &mut output_buffer).unwrap();
+
+        let decoded = server_codec.decode(&mut output_buffer).unwrap().unwrap();
+        let Frame::Publish(message) = decoded else { panic!("expected Publish frame") };
+        assert_eq!(message.topic, publish.topic);
+        assert_eq!(message.payload, publish.payload);
+        assert_eq!(message.header, publish.header);
+        assert!(output_buffer.is_empty());
+    }
+
+    #[test]
+    fn encode_publish_frame_has_correct_header() {
+        let publish = pb::Publish {
+            topic: b"test/topic".to_vec(),
+            payload: b"hello".to_vec(),
+            header: vec![],
+        };
+        let mut codec = ServerCodec;
+        let mut output_buffer = BytesMut::new();
+
+        codec.encode(publish, &mut output_buffer).unwrap();
+
+        assert!(output_buffer.len() >= HEADER_LENGTH);
+        assert_eq!(output_buffer[0], Command::Publish as u8);
+
+        let mut header_bytes = &output_buffer[COMMAND_BYTE_LEN..HEADER_LENGTH];
+        let payload_length = header_bytes.get_u32() as usize;
+        assert_eq!(payload_length, output_buffer.len() - HEADER_LENGTH);
+    }
+
+    // --- Subscribe ---
+
+    #[test]
+    fn encode_and_decode_subscribe_frame() {
+        let subscribe = pb::Subscribe {
+            topic: b"sensors/#".to_vec(),
+            subscription_id: 7,
+            queue_group: "workers".to_string(),
+        };
+        let mut server_codec = ServerCodec;
+        let mut output_buffer = BytesMut::new();
+
+        server_codec.encode(subscribe.clone(), &mut output_buffer).unwrap();
+
+        let decoded = server_codec.decode(&mut output_buffer).unwrap().unwrap();
+        let Frame::Subscribe(message) = decoded else { panic!("expected Subscribe frame") };
+        assert_eq!(message.topic, subscribe.topic);
+        assert_eq!(message.subscription_id, subscribe.subscription_id);
+        assert_eq!(message.queue_group, subscribe.queue_group);
+        assert!(output_buffer.is_empty());
+    }
+
+    #[test]
+    fn subscribe_without_queue_group_roundtrips() {
+        let subscribe = pb::Subscribe {
+            topic: b"events/+/status".to_vec(),
+            subscription_id: 1,
+            queue_group: String::new(),
+        };
+        let mut server_codec = ServerCodec;
+        let mut output_buffer = BytesMut::new();
+
+        server_codec.encode(subscribe.clone(), &mut output_buffer).unwrap();
+        let decoded = server_codec.decode(&mut output_buffer).unwrap().unwrap();
+        let Frame::Subscribe(message) = decoded else { panic!("expected Subscribe frame") };
+        assert_eq!(message.subscription_id, subscribe.subscription_id);
+        assert!(message.queue_group.is_empty());
+    }
+
+    // --- UnSubscribe ---
+
+    #[test]
+    fn encode_and_decode_unsubscribe_frame() {
+        let unsubscribe = pb::UnSubscribe { subscription_id: 42 };
+        let mut server_codec = ServerCodec;
+        let mut output_buffer = BytesMut::new();
+
+        server_codec.encode(unsubscribe, &mut output_buffer).unwrap();
+
+        let decoded = server_codec.decode(&mut output_buffer).unwrap().unwrap();
+        let Frame::UnSubscribe(message) = decoded else { panic!("expected UnSubscribe frame") };
+        assert_eq!(message.subscription_id, unsubscribe.subscription_id);
+        assert!(output_buffer.is_empty());
+    }
+
+    // --- Message ---
+
+    #[test]
+    fn encode_and_decode_message_frame() {
+        let message = pb::Message {
+            topic: b"sensors/temperature".to_vec(),
+            subscription_id: 3,
+            payload: b"23.1".to_vec(),
+            header: b"encoding:utf-8".to_vec(),
+        };
+        let mut server_codec = ServerCodec;
+        let mut client_codec = ClientCodec;
+        let mut output_buffer = BytesMut::new();
+
+        server_codec.encode(message.clone(), &mut output_buffer).unwrap();
+
+        let decoded = client_codec.decode(&mut output_buffer).unwrap().unwrap();
+        let ClientFrame::Message(delivered) = decoded else { panic!("expected Message frame") };
+        assert_eq!(delivered.topic, message.topic);
+        assert_eq!(delivered.subscription_id, message.subscription_id);
+        assert_eq!(delivered.payload, message.payload);
+        assert_eq!(delivered.header, message.header);
+        assert!(output_buffer.is_empty());
+    }
+
+    #[test]
+    fn client_decode_message_frame_recovers_from_bad_prefix() {
+        let message = pb::Message {
+            topic: b"test/topic".to_vec(),
+            subscription_id: 5,
+            payload: b"data".to_vec(),
+            header: vec![],
+        };
+        let payload = message.encode_to_vec();
+
+        let mut incoming_bytes = BytesMut::new();
+        incoming_bytes.put_u8(0xFF); // invalid command byte to force resync
+        incoming_bytes.put_u8(Command::Message as u8);
+        incoming_bytes.put_u32(payload.len() as u32);
+        incoming_bytes.extend_from_slice(&payload);
+
+        let mut codec = ClientCodec;
+        let decoded = codec.decode(&mut incoming_bytes).unwrap().unwrap();
+        let ClientFrame::Message(delivered) = decoded else { panic!("expected Message frame") };
+        assert_eq!(delivered.subscription_id, message.subscription_id);
+        assert!(incoming_bytes.is_empty());
+    }
+
+    // --- Mixed frame sequence ---
+
+    #[tokio::test]
+    async fn framed_read_decodes_publish_subscribe_unsubscribe_sequence() {
+        let publish =
+            pb::Publish { topic: b"a/b".to_vec(), payload: b"payload".to_vec(), header: vec![] };
+        let subscribe = pb::Subscribe {
+            topic: b"a/#".to_vec(),
+            subscription_id: 1,
+            queue_group: String::new(),
+        };
+        let unsubscribe = pb::UnSubscribe { subscription_id: 1 };
+
+        let mut client_codec = ClientCodec;
+        let mut buf = BytesMut::new();
+        client_codec.encode(publish, &mut buf).unwrap();
+        client_codec.encode(subscribe, &mut buf).unwrap();
+        client_codec.encode(unsubscribe, &mut buf).unwrap();
+
+        let cursor = Cursor::new(buf.to_vec());
+        let mut framed = FramedRead::with_capacity(cursor, ServerCodec, 32 * 1024);
+
+        assert!(matches!(framed.next().await.unwrap().unwrap(), Frame::Publish(_)));
+        assert!(matches!(framed.next().await.unwrap().unwrap(), Frame::Subscribe(_)));
+        assert!(matches!(framed.next().await.unwrap().unwrap(), Frame::UnSubscribe(_)));
         assert!(framed.next().await.is_none());
     }
 }
