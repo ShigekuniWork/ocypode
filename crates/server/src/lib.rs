@@ -8,4 +8,5 @@ pub mod parser;
 pub mod permission;
 pub mod quic;
 pub mod router;
+pub mod topic;
 pub mod transport;
