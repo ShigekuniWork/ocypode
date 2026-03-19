@@ -5,7 +5,7 @@ use tokio::sync::mpsc::Sender;
 
 use crate::{
     client::ClientId,
-    topic::{TopicFilter, WILDCARD_MULTI, WILDCARD_SINGLE},
+    topic::{Topic, TopicFilter, WILDCARD_MULTI, WILDCARD_SINGLE},
 };
 
 #[allow(dead_code)]
@@ -31,7 +31,6 @@ struct Node {
     children: Option<Vec<Node>>,
     has_wildcard_single: bool,
     has_wildcard_multi: bool,
-    is_leaf: bool,
 }
 
 impl Default for Node {
@@ -43,7 +42,6 @@ impl Default for Node {
             children: None,
             has_wildcard_single: false,
             has_wildcard_multi: false,
-            is_leaf: true,
         }
     }
 }
@@ -75,7 +73,6 @@ impl Router {
             } else if segment == WILDCARD_MULTI {
                 node.has_wildcard_multi = true;
             }
-            node.is_leaf = false;
             let children = node.children.get_or_insert_with(Vec::new);
             let child_idx = match children.iter().position(|n| n.level == segment) {
                 Some(pos) => pos,
@@ -90,12 +87,72 @@ impl Router {
         node.subscription_map.insert(client_id, Subscription { subscription_id, tx });
     }
 
-    pub(crate) fn search(&self, _topic: &Bytes) -> SubscriptionResponse {
-        todo!()
+    pub(crate) fn search(&self, topic: &Topic) -> SubscriptionResponse {
+        let segments: Vec<&[u8]> = topic.segments().collect();
+        let mut subscription_list = Vec::new();
+        let mut queue_group_list = Vec::new();
+
+        // Stack of (node, remaining_segments).
+        let mut stack: Vec<(&Node, &[&[u8]])> = vec![(&self.root, &segments)];
+
+        while let Some((node, remaining)) = stack.pop() {
+            // `#` matches zero or more levels, so once a `#` child exists it absorbs
+            // all remaining segments. This covers both the multi-level case　and
+            // the zero-level case.
+            if node.has_wildcard_multi
+                && let Some(multi_child) = node
+                    .children
+                    .as_ref()
+                    .and_then(|c| c.iter().find(|n| n.level.as_ref() == WILDCARD_MULTI))
+            {
+                collect_node(multi_child, &mut subscription_list, &mut queue_group_list);
+            }
+
+            let [segment, rest @ ..] = remaining else {
+                collect_node(node, &mut subscription_list, &mut queue_group_list);
+                continue;
+            };
+
+            let Some(children) = &node.children else { continue };
+
+            for child in children {
+                if child.level.as_ref() == *segment || child.level.as_ref() == WILDCARD_SINGLE {
+                    stack.push((child, rest));
+                }
+            }
+        }
+
+        SubscriptionResponse { subscription_list, queue_group_list }
     }
 
     pub(crate) fn delete(&mut self, _client_id: ClientId, _subscription_id: u32) {
         todo!()
+    }
+}
+
+fn collect_node(
+    node: &Node,
+    subscription_list: &mut Vec<(ClientId, Subscription)>,
+    queue_group_list: &mut Vec<Vec<(ClientId, Subscription)>>,
+) {
+    for (&client_id, sub) in &node.subscription_map {
+        subscription_list.push((
+            client_id,
+            Subscription { subscription_id: sub.subscription_id, tx: sub.tx.clone() },
+        ));
+    }
+    for group in node.queue_group_map.values() {
+        queue_group_list.push(
+            group
+                .iter()
+                .map(|(&client_id, sub)| {
+                    (
+                        client_id,
+                        Subscription { subscription_id: sub.subscription_id, tx: sub.tx.clone() },
+                    )
+                })
+                .collect(),
+        );
     }
 }
 
@@ -138,16 +195,6 @@ mod tests {
         assert_eq!(level1.level.as_ref(), b"a");
         assert_eq!(level2.level.as_ref(), b"b");
         assert_eq!(level3.level.as_ref(), b"c");
-    }
-
-    #[tokio::test]
-    async fn insert_marks_intermediate_nodes_as_non_leaf() {
-        let mut router = Router::new();
-        router.insert(dummy_tx(), ClientId::new(), 1, make_filter("a/b/c"));
-        let level1 = &router.root.children.as_ref().unwrap()[0];
-        let level2 = &level1.children.as_ref().unwrap()[0];
-        assert!(!level1.is_leaf);
-        assert!(!level2.is_leaf);
     }
 
     #[tokio::test]
@@ -195,5 +242,96 @@ mod tests {
         assert_eq!(router.root.children.as_ref().unwrap().len(), 1);
         assert_eq!(level1.children.as_ref().unwrap().len(), 1);
         assert_eq!(level2.children.as_ref().unwrap().len(), 2);
+    }
+
+    fn make_topic(s: &str) -> Topic {
+        Topic::new(BytesMut::from(s)).unwrap()
+    }
+
+    #[tokio::test]
+    async fn search_exact_match_returns_subscriber() {
+        let mut router = Router::new();
+        let client_id = ClientId::new();
+        router.insert(dummy_tx(), client_id, 1, make_filter("a/b"));
+        let result = router.search(&make_topic("a/b"));
+        assert_eq!(result.subscription_list.len(), 1);
+        assert_eq!(result.subscription_list[0].0, client_id);
+    }
+
+    #[tokio::test]
+    async fn search_no_match_returns_empty() {
+        let mut router = Router::new();
+        router.insert(dummy_tx(), ClientId::new(), 1, make_filter("a/b"));
+        let result = router.search(&make_topic("a/c"));
+        assert!(result.subscription_list.is_empty());
+    }
+
+    #[tokio::test]
+    async fn search_single_wildcard_matches_one_segment() {
+        let mut router = Router::new();
+        let client_id = ClientId::new();
+        router.insert(dummy_tx(), client_id, 1, make_filter("a/+/c"));
+        let result = router.search(&make_topic("a/b/c"));
+        assert_eq!(result.subscription_list.len(), 1);
+        assert_eq!(result.subscription_list[0].0, client_id);
+    }
+
+    #[tokio::test]
+    async fn search_single_wildcard_does_not_match_wrong_depth() {
+        let mut router = Router::new();
+        router.insert(dummy_tx(), ClientId::new(), 1, make_filter("a/+/c"));
+        let result = router.search(&make_topic("a/c"));
+        assert!(result.subscription_list.is_empty());
+    }
+
+    #[tokio::test]
+    async fn search_multi_wildcard_matches_remaining_segments() {
+        let mut router = Router::new();
+        let client_id = ClientId::new();
+        router.insert(dummy_tx(), client_id, 1, make_filter("a/#"));
+        let result = router.search(&make_topic("a/b/c"));
+        assert_eq!(result.subscription_list.len(), 1);
+        assert_eq!(result.subscription_list[0].0, client_id);
+    }
+
+    #[tokio::test]
+    async fn search_multi_wildcard_matches_zero_remaining_segments() {
+        let mut router = Router::new();
+        let client_id = ClientId::new();
+        router.insert(dummy_tx(), client_id, 1, make_filter("a/#"));
+        let result = router.search(&make_topic("a"));
+        assert_eq!(result.subscription_list.len(), 1);
+        assert_eq!(result.subscription_list[0].0, client_id);
+    }
+
+    #[tokio::test]
+    async fn search_root_multi_wildcard_matches_any_topic() {
+        let mut router = Router::new();
+        let client_id = ClientId::new();
+        router.insert(dummy_tx(), client_id, 1, make_filter("#"));
+        let result = router.search(&make_topic("a/b/c"));
+        assert_eq!(result.subscription_list.len(), 1);
+        assert_eq!(result.subscription_list[0].0, client_id);
+    }
+
+    #[tokio::test]
+    async fn search_returns_all_matching_subscribers() {
+        let mut router = Router::new();
+        router.insert(dummy_tx(), ClientId::new(), 1, make_filter("a/b"));
+        router.insert(dummy_tx(), ClientId::new(), 2, make_filter("a/+"));
+        router.insert(dummy_tx(), ClientId::new(), 3, make_filter("a/#"));
+        let result = router.search(&make_topic("a/b"));
+        assert_eq!(result.subscription_list.len(), 3);
+    }
+
+    #[tokio::test]
+    async fn search_non_matching_sibling_not_returned() {
+        let mut router = Router::new();
+        router.insert(dummy_tx(), ClientId::new(), 1, make_filter("x/y"));
+        let client_id = ClientId::new();
+        router.insert(dummy_tx(), client_id, 2, make_filter("a/b"));
+        let result = router.search(&make_topic("a/b"));
+        assert_eq!(result.subscription_list.len(), 1);
+        assert_eq!(result.subscription_list[0].0, client_id);
     }
 }
