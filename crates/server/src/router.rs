@@ -21,7 +21,19 @@ pub(crate) struct SubscriptionResponse {
     pub(crate) queue_group_list: Vec<Vec<(ClientId, Subscription)>>,
 }
 
-type SubscriptionMap = HashMap<ClientId, Subscription>;
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) struct SubscriptionKey {
+    pub(crate) client_id: ClientId,
+    pub(crate) subscription_id: u32,
+}
+
+impl SubscriptionKey {
+    fn new(client_id: ClientId, subscription_id: u32) -> Self {
+        Self { client_id, subscription_id }
+    }
+}
+
+type SubscriptionMap = HashMap<SubscriptionKey, Sender<Bytes>>;
 
 #[allow(dead_code)]
 struct Node {
@@ -84,7 +96,7 @@ impl Router {
             };
             node = &mut children[child_idx];
         }
-        node.subscription_map.insert(client_id, Subscription { subscription_id, tx });
+        node.subscription_map.insert(SubscriptionKey::new(client_id, subscription_id), tx);
     }
 
     pub(crate) fn search(&self, topic: &Topic) -> SubscriptionResponse {
@@ -135,20 +147,20 @@ fn collect_node(
     subscription_list: &mut Vec<(ClientId, Subscription)>,
     queue_group_list: &mut Vec<Vec<(ClientId, Subscription)>>,
 ) {
-    for (&client_id, sub) in &node.subscription_map {
+    for (key, tx) in &node.subscription_map {
         subscription_list.push((
-            client_id,
-            Subscription { subscription_id: sub.subscription_id, tx: sub.tx.clone() },
+            key.client_id,
+            Subscription { subscription_id: key.subscription_id, tx: tx.clone() },
         ));
     }
     for group in node.queue_group_map.values() {
         queue_group_list.push(
             group
                 .iter()
-                .map(|(&client_id, sub)| {
+                .map(|(key, tx)| {
                     (
-                        client_id,
-                        Subscription { subscription_id: sub.subscription_id, tx: sub.tx.clone() },
+                        key.client_id,
+                        Subscription { subscription_id: key.subscription_id, tx: tx.clone() },
                     )
                 })
                 .collect(),
@@ -203,8 +215,7 @@ mod tests {
         let client_id = ClientId::new();
         router.insert(dummy_tx(), client_id, 7, make_filter("a/b"));
         let leaf = &router.root.children.as_ref().unwrap()[0].children.as_ref().unwrap()[0];
-        assert!(leaf.subscription_map.contains_key(&client_id));
-        assert_eq!(leaf.subscription_map[&client_id].subscription_id, 7);
+        assert!(leaf.subscription_map.contains_key(&SubscriptionKey::new(client_id, 7)));
     }
 
     #[tokio::test]
