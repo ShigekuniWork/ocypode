@@ -1,6 +1,7 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use bytes::Bytes;
+use dashmap::DashMap;
 use tokio::sync::mpsc::Sender;
 
 use crate::{
@@ -35,6 +36,9 @@ impl SubscriptionKey {
 
 type SubscriptionMap = HashMap<SubscriptionKey, Sender<Bytes>>;
 
+// SubscriptionKV remembers current subscribing topics for un-subscribing.
+type SubscriptionKV = Arc<DashMap<SubscriptionKey, TopicFilter>>;
+
 #[allow(dead_code)]
 struct Node {
     level: Bytes,
@@ -61,12 +65,17 @@ impl Default for Node {
 #[allow(dead_code)]
 pub(crate) struct Router {
     root: Node,
+    subscription_kv: SubscriptionKV,
 }
 
 #[allow(dead_code)]
 impl Router {
     pub(crate) fn new() -> Router {
-        Router { root: Node::default() }
+        Router { root: Node::default(), subscription_kv: Arc::new(DashMap::new()) }
+    }
+
+    pub(crate) fn subscription_kv(&self) -> SubscriptionKV {
+        Arc::clone(&self.subscription_kv)
     }
 
     pub(crate) fn insert(
@@ -96,7 +105,9 @@ impl Router {
             };
             node = &mut children[child_idx];
         }
-        node.subscription_map.insert(SubscriptionKey::new(client_id, subscription_id), tx);
+        let key = SubscriptionKey::new(client_id, subscription_id);
+        node.subscription_map.insert(key, tx);
+        self.subscription_kv.insert(key, topic);
     }
 
     pub(crate) fn search(&self, topic: &Topic) -> SubscriptionResponse {
@@ -137,8 +148,62 @@ impl Router {
         SubscriptionResponse { subscription_list, queue_group_list }
     }
 
-    pub(crate) fn delete(&mut self, _client_id: ClientId, _subscription_id: u32) {
-        todo!()
+    pub(crate) fn delete(&mut self, subscription_key: SubscriptionKey) {
+        let Some(topic) = self.subscription_kv.get(&subscription_key).map(|r| r.clone()) else {
+            return;
+        };
+
+        let segments: Vec<&[u8]> = topic.segments().collect();
+
+        let mut path: Vec<usize> = Vec::with_capacity(segments.len());
+        {
+            let mut node = &self.root;
+            for segment in &segments {
+                let Some(children) = &node.children else { return };
+                let Some(idx) = children.iter().position(|n| n.level.as_ref() == *segment) else {
+                    return;
+                };
+                path.push(idx);
+                node = &children[idx];
+            }
+        }
+
+        {
+            let mut node = &mut self.root;
+            for &idx in &path {
+                node = &mut node.children.as_mut().unwrap()[idx];
+            }
+            node.subscription_map.remove(&subscription_key);
+        }
+
+        for depth in (0..path.len()).rev() {
+            let mut node = &mut self.root;
+            for &idx in &path[..depth] {
+                node = &mut node.children.as_mut().unwrap()[idx];
+            }
+            let children = node.children.as_mut().unwrap();
+            let child = &children[path[depth]];
+            if child.subscription_map.is_empty()
+                && child.queue_group_map.is_empty()
+                && child.children.is_none()
+            {
+                let removed = children.remove(path[depth]).level;
+                if removed.as_ref() == WILDCARD_SINGLE {
+                    node.has_wildcard_single =
+                        children.iter().any(|n| n.level.as_ref() == WILDCARD_SINGLE);
+                } else if removed.as_ref() == WILDCARD_MULTI {
+                    node.has_wildcard_multi =
+                        children.iter().any(|n| n.level.as_ref() == WILDCARD_MULTI);
+                }
+                if children.is_empty() {
+                    node.children = None;
+                }
+            } else {
+                break;
+            }
+        }
+
+        self.subscription_kv.remove(&subscription_key);
     }
 }
 
@@ -190,15 +255,15 @@ mod tests {
         tokio::sync::mpsc::channel(1).0
     }
 
-    #[tokio::test]
-    async fn insert_single_segment_creates_child() {
+    #[test]
+    fn insert_single_segment_creates_child() {
         let mut router = Router::new();
         router.insert(dummy_tx(), ClientId::new(), 1, make_filter("a"));
         assert_eq!(router.root.children.as_ref().unwrap().len(), 1);
     }
 
-    #[tokio::test]
-    async fn insert_multi_segment_creates_nested_children() {
+    #[test]
+    fn insert_multi_segment_creates_nested_children() {
         let mut router = Router::new();
         router.insert(dummy_tx(), ClientId::new(), 1, make_filter("a/b/c"));
         let level1 = &router.root.children.as_ref().unwrap()[0];
@@ -209,8 +274,8 @@ mod tests {
         assert_eq!(level3.level.as_ref(), b"c");
     }
 
-    #[tokio::test]
-    async fn insert_leaf_node_contains_subscription() {
+    #[test]
+    fn insert_leaf_node_contains_subscription() {
         let mut router = Router::new();
         let client_id = ClientId::new();
         router.insert(dummy_tx(), client_id, 7, make_filter("a/b"));
@@ -218,24 +283,24 @@ mod tests {
         assert!(leaf.subscription_map.contains_key(&SubscriptionKey::new(client_id, 7)));
     }
 
-    #[tokio::test]
-    async fn insert_wildcard_single_wildcard_sets_flag_on_parent() {
+    #[test]
+    fn insert_wildcard_single_wildcard_sets_flag_on_parent() {
         let mut router = Router::new();
         router.insert(dummy_tx(), ClientId::new(), 1, make_filter("a/+/c"));
         let level1 = &router.root.children.as_ref().unwrap()[0];
         assert!(level1.has_wildcard_single);
     }
 
-    #[tokio::test]
-    async fn insert_wildcard_multi_sets_flag_on_parent() {
+    #[test]
+    fn insert_wildcard_multi_sets_flag_on_parent() {
         let mut router = Router::new();
         router.insert(dummy_tx(), ClientId::new(), 1, make_filter("a/#"));
         let level1 = &router.root.children.as_ref().unwrap()[0];
         assert!(level1.has_wildcard_multi);
     }
 
-    #[tokio::test]
-    async fn insert_two_subscribers_same_topic() {
+    #[test]
+    fn insert_two_subscribers_same_topic() {
         let mut router = Router::new();
         router.insert(dummy_tx(), ClientId::new(), 1, make_filter("a/b"));
         router.insert(dummy_tx(), ClientId::new(), 2, make_filter("a/b"));
@@ -243,8 +308,8 @@ mod tests {
         assert_eq!(leaf.subscription_map.len(), 2);
     }
 
-    #[tokio::test]
-    async fn insert_shares_common_prefix_nodes() {
+    #[test]
+    fn insert_shares_common_prefix_nodes() {
         let mut router = Router::new();
         router.insert(dummy_tx(), ClientId::new(), 1, make_filter("a/b/c"));
         router.insert(dummy_tx(), ClientId::new(), 2, make_filter("a/b/d"));
@@ -259,8 +324,8 @@ mod tests {
         Topic::new(BytesMut::from(s)).unwrap()
     }
 
-    #[tokio::test]
-    async fn search_exact_match_returns_subscriber() {
+    #[test]
+    fn search_exact_match_returns_subscriber() {
         let mut router = Router::new();
         let client_id = ClientId::new();
         router.insert(dummy_tx(), client_id, 1, make_filter("a/b"));
@@ -269,16 +334,16 @@ mod tests {
         assert_eq!(result.subscription_list[0].0, client_id);
     }
 
-    #[tokio::test]
-    async fn search_no_match_returns_empty() {
+    #[test]
+    fn search_no_match_returns_empty() {
         let mut router = Router::new();
         router.insert(dummy_tx(), ClientId::new(), 1, make_filter("a/b"));
         let result = router.search(&make_topic("a/c"));
         assert!(result.subscription_list.is_empty());
     }
 
-    #[tokio::test]
-    async fn search_single_wildcard_matches_one_segment() {
+    #[test]
+    fn search_single_wildcard_matches_one_segment() {
         let mut router = Router::new();
         let client_id = ClientId::new();
         router.insert(dummy_tx(), client_id, 1, make_filter("a/+/c"));
@@ -287,16 +352,16 @@ mod tests {
         assert_eq!(result.subscription_list[0].0, client_id);
     }
 
-    #[tokio::test]
-    async fn search_single_wildcard_does_not_match_wrong_depth() {
+    #[test]
+    fn search_single_wildcard_does_not_match_wrong_depth() {
         let mut router = Router::new();
         router.insert(dummy_tx(), ClientId::new(), 1, make_filter("a/+/c"));
         let result = router.search(&make_topic("a/c"));
         assert!(result.subscription_list.is_empty());
     }
 
-    #[tokio::test]
-    async fn search_multi_wildcard_matches_remaining_segments() {
+    #[test]
+    fn search_multi_wildcard_matches_remaining_segments() {
         let mut router = Router::new();
         let client_id = ClientId::new();
         router.insert(dummy_tx(), client_id, 1, make_filter("a/#"));
@@ -305,8 +370,8 @@ mod tests {
         assert_eq!(result.subscription_list[0].0, client_id);
     }
 
-    #[tokio::test]
-    async fn search_multi_wildcard_matches_zero_remaining_segments() {
+    #[test]
+    fn search_multi_wildcard_matches_zero_remaining_segments() {
         let mut router = Router::new();
         let client_id = ClientId::new();
         router.insert(dummy_tx(), client_id, 1, make_filter("a/#"));
@@ -315,8 +380,8 @@ mod tests {
         assert_eq!(result.subscription_list[0].0, client_id);
     }
 
-    #[tokio::test]
-    async fn search_root_multi_wildcard_matches_any_topic() {
+    #[test]
+    fn search_root_multi_wildcard_matches_any_topic() {
         let mut router = Router::new();
         let client_id = ClientId::new();
         router.insert(dummy_tx(), client_id, 1, make_filter("#"));
@@ -325,8 +390,8 @@ mod tests {
         assert_eq!(result.subscription_list[0].0, client_id);
     }
 
-    #[tokio::test]
-    async fn search_returns_all_matching_subscribers() {
+    #[test]
+    fn search_returns_all_matching_subscribers() {
         let mut router = Router::new();
         router.insert(dummy_tx(), ClientId::new(), 1, make_filter("a/b"));
         router.insert(dummy_tx(), ClientId::new(), 2, make_filter("a/+"));
@@ -335,8 +400,8 @@ mod tests {
         assert_eq!(result.subscription_list.len(), 3);
     }
 
-    #[tokio::test]
-    async fn search_non_matching_sibling_not_returned() {
+    #[test]
+    fn search_non_matching_sibling_not_returned() {
         let mut router = Router::new();
         router.insert(dummy_tx(), ClientId::new(), 1, make_filter("x/y"));
         let client_id = ClientId::new();
@@ -344,5 +409,80 @@ mod tests {
         let result = router.search(&make_topic("a/b"));
         assert_eq!(result.subscription_list.len(), 1);
         assert_eq!(result.subscription_list[0].0, client_id);
+    }
+
+    #[test]
+    fn delete_removes_subscription_from_leaf() {
+        let mut router = Router::new();
+        let client_id_1 = ClientId::new();
+        let client_id_2 = ClientId::new();
+        router.insert(dummy_tx(), client_id_1, 1, make_filter("a/b"));
+        router.insert(dummy_tx(), client_id_2, 2, make_filter("a/b"));
+        router.delete(SubscriptionKey::new(client_id_1, 1));
+        let leaf = &router.root.children.as_ref().unwrap()[0].children.as_ref().unwrap()[0];
+        assert!(!leaf.subscription_map.contains_key(&SubscriptionKey::new(client_id_1, 1)));
+        assert_eq!(leaf.subscription_map.len(), 1);
+    }
+
+    #[test]
+    fn delete_cleans_up_empty_leaf_node() {
+        let mut router = Router::new();
+        let client_id = ClientId::new();
+        router.insert(dummy_tx(), client_id, 1, make_filter("a"));
+        router.delete(SubscriptionKey::new(client_id, 1));
+        assert!(router.root.children.is_none());
+    }
+
+    #[test]
+    fn delete_cleans_up_empty_intermediate_nodes() {
+        let mut router = Router::new();
+        let client_id = ClientId::new();
+        router.insert(dummy_tx(), client_id, 1, make_filter("a/b/c"));
+        router.delete(SubscriptionKey::new(client_id, 1));
+        assert!(router.root.children.is_none());
+    }
+
+    #[test]
+    fn delete_updates_wildcard_single_flag_on_parent() {
+        let mut router = Router::new();
+        let client_id = ClientId::new();
+        router.insert(dummy_tx(), client_id, 1, make_filter("a/+/c"));
+        let level1 = &router.root.children.as_ref().unwrap()[0];
+        assert!(level1.has_wildcard_single);
+        router.delete(SubscriptionKey::new(client_id, 1));
+        assert!(router.root.children.is_none());
+    }
+
+    #[test]
+    fn delete_updates_wildcard_multi_flag_on_parent() {
+        let mut router = Router::new();
+        let client_id = ClientId::new();
+        router.insert(dummy_tx(), client_id, 1, make_filter("a/#"));
+        let level1 = &router.root.children.as_ref().unwrap()[0];
+        assert!(level1.has_wildcard_multi);
+        router.delete(SubscriptionKey::new(client_id, 1));
+        assert!(router.root.children.is_none());
+    }
+
+    #[test]
+    fn delete_of_nonexistent_key_is_noop() {
+        let mut router = Router::new();
+        router.insert(dummy_tx(), ClientId::new(), 1, make_filter("a/b"));
+        let children_before = router.root.children.as_ref().unwrap().len();
+        router.delete(SubscriptionKey::new(ClientId::new(), 99));
+        assert_eq!(router.root.children.as_ref().unwrap().len(), children_before);
+    }
+
+    #[test]
+    fn delete_leaves_sibling_intact() {
+        let mut router = Router::new();
+        let client_id_1 = ClientId::new();
+        let client_id_2 = ClientId::new();
+        router.insert(dummy_tx(), client_id_1, 1, make_filter("a/b"));
+        router.insert(dummy_tx(), client_id_2, 2, make_filter("a/c"));
+        router.delete(SubscriptionKey::new(client_id_1, 1));
+        let level1 = &router.root.children.as_ref().unwrap()[0];
+        assert_eq!(level1.children.as_ref().unwrap().len(), 1);
+        assert_eq!(level1.children.as_ref().unwrap()[0].level.as_ref(), b"c");
     }
 }
