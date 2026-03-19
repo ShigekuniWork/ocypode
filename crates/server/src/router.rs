@@ -29,8 +29,8 @@ struct Node {
     subscription_map: SubscriptionMap,
     queue_group_map: HashMap<Bytes, SubscriptionMap>,
     children: Option<Vec<Node>>,
-    has_single_wildcard: bool,
-    has_multi_wildcard: bool,
+    has_wildcard_single: bool,
+    has_wildcard_multi: bool,
     is_leaf: bool,
 }
 
@@ -41,8 +41,8 @@ impl Default for Node {
             subscription_map: SubscriptionMap::new(),
             queue_group_map: HashMap::new(),
             children: None,
-            has_single_wildcard: false,
-            has_multi_wildcard: false,
+            has_wildcard_single: false,
+            has_wildcard_multi: false,
             is_leaf: true,
         }
     }
@@ -71,9 +71,9 @@ impl Router {
             // Wildcard flags on the parent are used during search to identify which
             // branches to explore when delivering messages to matching subscribers.
             if segment == WILDCARD_SINGLE {
-                node.has_single_wildcard = true;
+                node.has_wildcard_single = true;
             } else if segment == WILDCARD_MULTI {
-                node.has_multi_wildcard = true;
+                node.has_wildcard_multi = true;
             }
             node.is_leaf = false;
             let children = node.children.get_or_insert_with(Vec::new);
@@ -161,19 +161,19 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn insert_single_wildcard_sets_flag_on_parent() {
+    async fn insert_wildcard_single_wildcard_sets_flag_on_parent() {
         let mut router = Router::new();
         router.insert(dummy_tx(), ClientId::new(), 1, make_filter("a/+/c"));
         let level1 = &router.root.children.as_ref().unwrap()[0];
-        assert!(level1.has_single_wildcard);
+        assert!(level1.has_wildcard_single);
     }
 
     #[tokio::test]
-    async fn insert_multi_wildcard_sets_flag_on_parent() {
+    async fn insert_wildcard_multi_sets_flag_on_parent() {
         let mut router = Router::new();
         router.insert(dummy_tx(), ClientId::new(), 1, make_filter("a/#"));
         let level1 = &router.root.children.as_ref().unwrap()[0];
-        assert!(level1.has_multi_wildcard);
+        assert!(level1.has_wildcard_multi);
     }
 
     #[tokio::test]
