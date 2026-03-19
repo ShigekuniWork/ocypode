@@ -172,7 +172,14 @@ impl ServerOutbound {
     /// TODO: Load INFO message from configuration instead of using dummy values
     #[allow(dead_code)]
     pub fn default_info() -> pb::Info {
-        Self::info(1, ClientId(0), "ocypode-server".to_string(), "ocypode".to_string(), false, false)
+        Self::info(
+            1,
+            ClientId(0),
+            "ocypode-server".to_string(),
+            "ocypode".to_string(),
+            false,
+            false,
+        )
     }
 }
 
