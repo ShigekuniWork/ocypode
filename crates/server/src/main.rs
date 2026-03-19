@@ -22,6 +22,7 @@ mod parser;
 mod permission;
 mod quic;
 mod router;
+mod topic;
 mod transport;
 
 #[tokio::main]
