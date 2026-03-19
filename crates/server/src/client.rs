@@ -14,7 +14,7 @@ use tokio::{
     sync::mpsc,
 };
 use tokio_stream::StreamExt;
-use tokio_util::{codec::{FramedRead, FramedWrite}};
+use tokio_util::codec::{FramedRead, FramedWrite};
 
 static CLIENT_ID_COUNTER: AtomicU64 = AtomicU64::new(1);
 
