@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use std::fmt;
 
 use bytes::{Bytes, BytesMut};
@@ -74,7 +76,6 @@ impl TopicFilter {
         Ok(TopicFilter(bytes))
     }
 
-    #[allow(dead_code)]
     pub fn as_bytes(&self) -> &[u8] {
         &self.0
     }

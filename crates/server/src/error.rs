@@ -2,6 +2,7 @@ use std::io;
 
 use thiserror::Error;
 
+#[allow(dead_code)]
 #[derive(Debug, PartialEq, Eq, Error)]
 pub enum TopicError {
     #[error("topic is empty")]
