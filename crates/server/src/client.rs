@@ -14,7 +14,7 @@ use tokio::{
     sync::mpsc,
 };
 use tokio_stream::StreamExt;
-use tokio_util::codec::{FramedRead, FramedWrite};
+use tokio_util::{codec::{FramedRead, FramedWrite}};
 
 static CLIENT_ID_COUNTER: AtomicU64 = AtomicU64::new(1);
 
@@ -43,10 +43,26 @@ impl From<mpsc::error::SendError<OutboundMessage>> for ClientError {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ClientId(pub u64);
+
+impl ClientId {
+    #[allow(clippy::new_without_default)]
+    pub fn new() -> ClientId {
+        ClientId(CLIENT_ID_COUNTER.fetch_add(1, Ordering::Relaxed))
+    }
+}
+
+impl std::fmt::Display for ClientId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 /// Server-side representation of a connected client.
 /// Created immediately after the QUIC stream is accepted, before the handshake.
 pub struct Client<R: AsyncRead + Unpin + Send> {
-    client_id: u64,
+    client_id: ClientId,
     /// Read buffer (FramedRead holds a 32 KiB byte buffer internally).
     framed_read: FramedRead<R, ServerCodec>,
     /// Sender end of the outbound write-buffer channel.
@@ -64,7 +80,7 @@ impl<R: AsyncRead + Unpin + Send + 'static> Client<R> {
         authenticator: Arc<dyn Authenticator>,
         config: Arc<ServerConfig>,
     ) -> Self {
-        let client_id = CLIENT_ID_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let client_id = ClientId::new();
         let (reader, writer) = transport.into_split();
         let framed_read =
             FramedRead::with_capacity(reader, ServerCodec, config.quic.read_buffer_size);

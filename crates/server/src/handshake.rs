@@ -6,17 +6,18 @@ use thiserror::Error;
 
 use crate::{
     auth::{AuthOutcome, Authenticator},
+    client::ClientId,
     parser::pb,
 };
 
 /// Initial state: INFO has been sent to the client, CONNECT has not yet arrived.
 pub struct PendingHandshake {
-    pub client_id: u64,
+    pub client_id: ClientId,
 }
 
 /// Terminal state: CONNECT received and authentication succeeded.
 pub struct CompletedHandshake {
-    pub client_id: u64,
+    pub client_id: ClientId,
     /// The CONNECT message received from the client; available for future dispatch logic.
     #[allow(dead_code)]
     pub connect_info: pb::Connect,
@@ -37,7 +38,7 @@ pub enum HandshakeError {
 }
 
 impl PendingHandshake {
-    pub fn new(client_id: u64) -> Self {
+    pub fn new(client_id: ClientId) -> Self {
         Self { client_id }
     }
 
@@ -65,7 +66,8 @@ mod tests {
 
     #[test]
     fn on_connect_transitions_to_completed_with_no_auth() {
-        let pending = PendingHandshake::new(42);
+        let client_id = ClientId::new();
+        let pending = PendingHandshake::new(client_id);
         let connect = pb::Connect {
             version: 1,
             verbose: false,
@@ -73,6 +75,6 @@ mod tests {
             credentials: None,
         };
         let completed = pending.on_connect(connect, &NoAuthAuthenticator).unwrap();
-        assert_eq!(completed.client_id, 42);
+        assert_eq!(completed.client_id, client_id);
     }
 }

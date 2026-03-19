@@ -2,7 +2,10 @@ use bytes::{Buf, BufMut, Bytes, BytesMut};
 use prost::Message;
 use tokio_util::codec::{Decoder, Encoder};
 
-use crate::error::{ClientCodecError, CodecError, ServerCodecError};
+use crate::{
+    client::ClientId,
+    error::{ClientCodecError, CodecError, ServerCodecError},
+};
 pub mod pb {
     include!(concat!(env!("OUT_DIR"), "/ocypode.pubsub.v1.rs"));
 }
@@ -148,7 +151,7 @@ impl ServerOutbound {
     /// Creates an INFO message with specified parameters
     pub fn info(
         version: u32,
-        client_id: u64,
+        client_id: ClientId,
         server_id: String,
         server_name: String,
         requires_auth: bool,
@@ -159,7 +162,7 @@ impl ServerOutbound {
             server_id,
             server_name,
             max_payload: MAXIMUM_PAYLOAD_BYTES as u32,
-            client_id,
+            client_id: client_id.0,
             requires_auth,
             tls_verify,
         }
@@ -169,7 +172,7 @@ impl ServerOutbound {
     /// TODO: Load INFO message from configuration instead of using dummy values
     #[allow(dead_code)]
     pub fn default_info() -> pb::Info {
-        Self::info(1, 0, "ocypode-server".to_string(), "ocypode".to_string(), false, false)
+        Self::info(1, ClientId(0), "ocypode-server".to_string(), "ocypode".to_string(), false, false)
     }
 }
 
