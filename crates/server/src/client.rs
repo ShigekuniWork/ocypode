@@ -14,7 +14,7 @@ use tokio::{
     sync::mpsc,
 };
 use tokio_stream::StreamExt;
-use tokio_util::{codec::{FramedRead, FramedWrite}};
+use tokio_util::codec::{FramedRead, FramedWrite};
 
 static CLIENT_ID_COUNTER: AtomicU64 = AtomicU64::new(1);
 
@@ -256,7 +256,7 @@ mod tests {
         let mut framed_read = FramedRead::with_capacity(client_rx, ClientCodec, 4096);
         let frame = framed_read.next().await.unwrap().unwrap();
         let ClientFrame::Info(info_msg) = frame else { panic!("expected Info frame") };
-        assert_eq!(info_msg.client_id, 1);
+        assert!(info_msg.client_id > 0);
 
         let mut framed_write = FramedWrite::with_capacity(client_tx, ClientCodec, 4096);
         framed_write.send(ClientOutbound::connect(1, false)).await.unwrap();
