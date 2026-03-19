@@ -20,6 +20,7 @@ prost = { workspace = true }
 bytes = { workspace = true }
 futures-util = { workspace = true }
 thiserror = { workspace = true }
+dashmap = { workspace = true }
 
 [build-dependencies]
 tonic-prost-build = { workspace = true }

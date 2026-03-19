@@ -20,3 +20,4 @@ rcgen = "0.14.7"
 bytes = "1.11.1"
 futures-util = { version = "0.3", default-features = false, features = ["sink"] }
 thiserror = "2.0.18"
+dashmap = "6.1.0"
