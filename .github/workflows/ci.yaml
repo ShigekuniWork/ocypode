@@ -34,7 +34,7 @@ jobs:
           components: rustfmt
 
       - name: Cache cargo registry and build artifacts
-        uses: Swatinem/rust-cache@c676846f29d98ff6b0106d3608c7ffd4048af17b # v2.9.0
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
 
       - name: Check format
         run: cargo +nightly fmt --all -- --check
@@ -52,7 +52,7 @@ jobs:
           toolchain: 1.93.1
 
       - name: Cache cargo registry and build artifacts
-        uses: Swatinem/rust-cache@c676846f29d98ff6b0106d3608c7ffd4048af17b # v2.9.0
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
 
       - name: Install protoc
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
@@ -73,7 +73,7 @@ jobs:
           toolchain: 1.93.1
 
       - name: Cache cargo registry and build artifacts
-        uses: Swatinem/rust-cache@c676846f29d98ff6b0106d3608c7ffd4048af17b # v2.9.0
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
 
       - name: Install protoc
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
@@ -97,7 +97,7 @@ jobs:
           toolchain: 1.93.1
 
       - name: Cache cargo registry and build artifacts
-        uses: Swatinem/rust-cache@c676846f29d98ff6b0106d3608c7ffd4048af17b # v2.9.0
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
 
       - name: Install cargo-machete
         uses: taiki-e/install-action@3216b6964cbfe053bb8b9a2ef245bd9300e2061d # v2.62.14
